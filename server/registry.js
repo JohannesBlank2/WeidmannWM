@@ -5,8 +5,24 @@ const path = require('path');
 
 const GAMES_DIR = path.join(__dirname, '..', 'games');
 
-const KATEGORIEN = ['sport', 'quiz', 'geschicklichkeit', 'gruppe'];
+const KATEGORIEN = ['sport', 'quiz', 'geschicklichkeit'];
 const INTERAKTIONEN = ['buzzer', 'multiple-choice', 'karte', 'schaetzen', 'keine'];
+const MODI = ['einzeln', 'gemeinsam'];
+
+// Id des Demo-/Platzhalterspiels. built:false-Spiele laden dessen Module.
+const DEMO_GAME_ID = 'buzzer-test';
+
+/**
+ * Normalisiert das modus-Feld zu einem Array gueltiger Modi.
+ * Erlaubt: 'einzeln' | 'gemeinsam' | 'beide' | Array davon.
+ * Fehlt das Feld, gilt das Spiel in BEIDEN Modi (sicherer Default fuer Demo).
+ */
+function normalizeModus(value) {
+  if (value === 'beide' || value == null) return ['einzeln', 'gemeinsam'];
+  const arr = Array.isArray(value) ? value : [value];
+  const out = arr.filter((m) => MODI.includes(m));
+  return out.length ? out : ['einzeln', 'gemeinsam'];
+}
 
 /**
  * Zentrale Spiel-Registry.
@@ -73,13 +89,21 @@ class Registry {
       ? def.interaktionstyp
       : 'keine';
     const schwierigkeit = Math.min(3, Math.max(1, Number(def.schwierigkeit) || 1));
+    const modus = normalizeModus(def.modus);
+    // built default true; nur explizit built:false ist ein Platzhalter.
+    const built = def.built !== false;
+    // demo = das Platzhalterspiel selbst (nicht im Pick-Pool).
+    const demo = def.demo === true || def.id === DEMO_GAME_ID;
 
     return {
       id: def.id,
       name: def.name || def.id,
       kategorie,
+      modus,
       schwierigkeit,
       interaktionstyp,
+      built,
+      demo,
       folder: folderName,
       assets: def.assets || null,
       // Hooks (no-ops, falls das Spiel sie nicht definiert)
@@ -99,8 +123,11 @@ class Registry {
       id: g.id,
       name: g.name,
       kategorie: g.kategorie,
+      modus: g.modus,
       schwierigkeit: g.schwierigkeit,
       interaktionstyp: g.interaktionstyp,
+      built: g.built,
+      demo: g.demo,
       folder: g.folder,
     }));
   }
@@ -113,11 +140,45 @@ class Registry {
       id: g.id,
       name: g.name,
       kategorie: g.kategorie,
+      modus: g.modus,
       schwierigkeit: g.schwierigkeit,
       interaktionstyp: g.interaktionstyp,
+      built: g.built,
       folder: g.folder,
     };
   }
+
+  /** Pool-Spiele (alle ausser dem Demo-Platzhalter). */
+  pool() {
+    return this.list().filter((g) => !g.demo);
+  }
+
+  /**
+   * Spiele zur Auswahl fuer den Pick-Ablauf: passender modus + kategorie,
+   * nicht das Demo, noch nicht verbraucht. Normal 3, weniger falls verbraucht.
+   */
+  buildChoices(modus, kategorie, consumed = []) {
+    return this.pool()
+      .filter(
+        (g) =>
+          g.modus.includes(modus) &&
+          g.kategorie === kategorie &&
+          !consumed.includes(g.id)
+      )
+      .map((g) => ({
+        gameId: g.id,
+        name: g.name,
+        kategorie: g.kategorie,
+        schwierigkeit: g.schwierigkeit,
+        interaktionstyp: g.interaktionstyp,
+        built: g.built,
+      }));
+  }
+
+  /** Kategorien, die fuer den Modus noch >=1 ungespieltes Spiel haben. */
+  availableKategorien(modus, consumed = []) {
+    return KATEGORIEN.filter((k) => this.buildChoices(modus, k, consumed).length > 0);
+  }
 }
 
-module.exports = { Registry, KATEGORIEN, INTERAKTIONEN };
+module.exports = { Registry, KATEGORIEN, INTERAKTIONEN, MODI, DEMO_GAME_ID };

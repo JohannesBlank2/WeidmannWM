@@ -27,6 +27,17 @@
     .game-head .title { font-size: 2.4rem; font-weight: 800; }
     .game-head .meta { color: var(--muted); margin-top: 6px; font-size: 1.2rem; }
 
+    /* Spiel-Auswahl (3 Karten) */
+    .choices-wrap { text-align: center; width: 100%; }
+    .choices-title { font-size: 1.6rem; margin-bottom: 24px; }
+    .choices { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+    .choice-card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      padding: 28px 32px; min-width: 220px;
+    }
+    .choice-card .cn { font-size: 1.8rem; font-weight: 800; }
+    .choice-card .cm { color: var(--muted); margin-top: 8px; font-size: 1.1rem; }
+
     footer.scores { padding: 18px 28px; border-top: 1px solid var(--line); background: var(--bg2); }
 
     /* Buzzer-Gewinner-Overlay */
@@ -64,6 +75,7 @@
   </main>
 
   <footer class="scores">
+    <div class="board-label" id="board-label">Gesamtwertung</div>
     <div class="scoreboard" id="scoreboard"></div>
   </footer>
 

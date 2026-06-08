@@ -16,8 +16,11 @@ module.exports = {
   id: 'buzzer-test',
   name: 'Buzzer-Test',
   kategorie: 'quiz',
+  modus: 'beide', // 'einzeln' | 'gemeinsam' | 'beide' | ['einzeln','gemeinsam']
   schwierigkeit: 1,
   interaktionstyp: 'buzzer',
+  built: true, // echtes Demo-Modul
+  demo: true, // Platzhalter fuer alle built:false-Spiele; NICHT im Pick-Pool
   assets: null,
 
   // Wird aufgerufen, wenn der Admin das Spiel startet.

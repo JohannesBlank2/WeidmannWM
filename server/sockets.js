@@ -73,6 +73,26 @@ function attachSockets(io, gameState, registry) {
       gameState.joinTeam(clientId, teamId);
     });
 
+    // ---- Pick-Ablauf (auswaehlendes Team auf seinem iPad) ------------------
+    // Nur das in der aktuellen Runde auswaehlende Team darf waehlen (Server prueft).
+    socket.on('pick:kategorie', ({ kategorie } = {}) => {
+      if (!clientId) return;
+      gameState.chooseKategorie(gameState.teamOfClient(clientId), kategorie);
+    });
+
+    socket.on('pick:spiel', ({ gameId } = {}) => {
+      if (!clientId) return;
+      // einzeln -> Spielerauswahl (false), gemeinsam -> Start sofort (true).
+      const started = gameState.chooseSpiel(gameState.teamOfClient(clientId), gameId);
+      if (started) runActiveGameHook('onStart');
+    });
+
+    // Spielerauswahl (nur Einzelspiele): jedes Team waehlt seinen Spieler.
+    socket.on('pick:spieler', ({ playerIndex } = {}) => {
+      if (!clientId) return;
+      gameState.selectPlayer(gameState.teamOfClient(clientId), playerIndex);
+    });
+
     // ---- Buzzer (Spieler) ---------------------------------------------------
     socket.on('buzz', () => {
       if (!clientId) return;
@@ -106,11 +126,44 @@ function attachSockets(io, gameState, registry) {
     socket.on('admin:rename-team', ({ teamId, name } = {}) =>
       gameState.renameTeam(teamId, name));
 
+    socket.on('admin:rename-player', ({ teamId, playerIndex, name } = {}) =>
+      gameState.renamePlayer(teamId, playerIndex, name));
+
+    // Gesamtpunkte (persistent) — bewusst nur +1 / -1.
     socket.on('admin:points', ({ teamId, delta } = {}) =>
       gameState.addPoints(teamId, delta));
 
     socket.on('admin:set-points', ({ teamId, value } = {}) =>
       gameState.setPoints(teamId, value));
+
+    // Spielpunkte (temporaer, getrennt von der Gesamtpunktzahl).
+    socket.on('admin:game-points', ({ teamId, delta } = {}) =>
+      gameState.addGamePoints(teamId, delta));
+
+    socket.on('admin:reset-game-points', () => gameState.resetGameScores());
+
+    // ---- Admin: Runden-/Pick-Ablauf ----------------------------------------
+    socket.on('admin:show-start', () => gameState.startShow());
+    socket.on('admin:open-kategorie', () => gameState.openKategorieAuswahl());
+    socket.on('admin:next-round', () => gameState.nextRound());
+    socket.on('admin:goto-bonus', () => gameState.gotoBonus());
+    socket.on('admin:goto-finale', () => gameState.gotoFinale());
+
+    // Admin kann Kategorie/Spiel/Spieler stellvertretend waehlen (Override).
+    socket.on('admin:pick-kategorie', ({ kategorie } = {}) =>
+      gameState.chooseKategorie(null, kategorie, true));
+
+    socket.on('admin:pick-spiel', ({ gameId } = {}) => {
+      if (gameState.chooseSpiel(null, gameId, true)) runActiveGameHook('onStart');
+    });
+
+    socket.on('admin:pick-spieler', ({ teamId, playerIndex } = {}) =>
+      gameState.selectPlayer(teamId, playerIndex));
+
+    // Nach der Spielerauswahl: Einzelspiel starten (Zaehler hochzaehlen).
+    socket.on('admin:start-selected-game', () => {
+      if (gameState.startSelectedGame()) runActiveGameHook('onStart');
+    });
 
     socket.on('admin:buzzer', ({ action } = {}) => {
       if (action === 'arm') {
@@ -123,19 +176,15 @@ function attachSockets(io, gameState, registry) {
       }
     });
 
+    // Spiel direkt starten (Override/Test, ausserhalb des Pick-Ablaufs).
     socket.on('admin:start-game', ({ gameId } = {}) => {
-      const meta = registry.meta(gameId);
-      if (!meta) return;
-      gameState.setActiveGame(meta);
-      gameState.setPhase('spiel-aktiv');
-      runActiveGameHook('onStart');
+      if (gameState.startGame(gameId)) runActiveGameHook('onStart');
     });
 
+    // Spiel beenden -> Auswertung (Spielpunkte bleiben sichtbar).
     socket.on('admin:stop-game', () => {
       runActiveGameHook('onStop');
-      gameState.clearActiveGame();
-      gameState.resetBuzzer();
-      gameState.setPhase('auswertung');
+      gameState.endGame();
     });
 
     socket.on('admin:reset-all', () => {

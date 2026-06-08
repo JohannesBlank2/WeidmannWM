@@ -61,9 +61,13 @@
         currentId = id;
 
         if (id) {
-          const url = `/games/${activeGame.folder}/${ctx.view}.js`;
+          // built:false -> Demo-Spiel (buzzer-test) als Platzhalter laden.
+          const isDemo = activeGame.built === false;
+          const folder = isDemo ? 'buzzer-test' : activeGame.folder;
+          const moduleId = isDemo ? 'buzzer-test' : id;
+          const url = `/games/${folder}/${ctx.view}.js`;
           await loadScript(url);
-          const def = window.GameRegistry.get(id);
+          const def = window.GameRegistry.get(moduleId);
           if (def) {
             currentDef = def;
             if (def.mount) {

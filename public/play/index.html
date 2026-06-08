@@ -22,6 +22,18 @@
     }
     .team-btn.active { background: var(--tc); color: #111; }
 
+    /* Pick-Bereich (Kategorie/Spiel-Auswahl + Warten) */
+    #pick-area:empty { display: none; }
+    .pick-title { text-align: center; font-size: 1.2rem; font-weight: 800; margin-bottom: 12px; }
+    .pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .pick-btn {
+      padding: 22px 10px; font-size: 1.15rem; font-weight: 800; border-radius: 14px;
+      border: 2px solid var(--accent); background: var(--panel); color: var(--text);
+    }
+    .pick-btn .sub { display: block; font-size: .8rem; font-weight: 500; color: var(--muted); margin-top: 4px; }
+    .waiting { text-align: center; color: var(--muted); padding: 30px 10px; }
+    .waiting .big { font-size: 1.4rem; color: var(--text); margin-bottom: 8px; }
+
     /* Buzzer */
     #buzzer-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
     #buzzer {
@@ -34,6 +46,7 @@
     #buzzer:disabled { background: radial-gradient(circle at 35% 30%, #555, #333); box-shadow: 0 8px 0 #222; }
     #buzz-status { font-size: 1.3rem; min-height: 1.6em; text-align: center; font-weight: 700; }
 
+    #game-area:empty { display: none; }
     #game-area { width: 100%; }
     .hint { text-align: center; color: var(--muted); }
   </style>
@@ -51,8 +64,9 @@
       <div class="team-grid" id="team-grid"></div>
     </section>
 
-    <!-- Schritt 2: Spielbereich (Buzzer / Spiel-Modul) -->
-    <section id="play-area" style="display:none; flex:1; display:flex; flex-direction:column;">
+    <!-- Schritt 2: Spielbereich (Pick / Buzzer / Spiel-Modul) -->
+    <section id="play-area" style="display:none; flex:1; flex-direction:column; gap:14px;">
+      <div id="pick-area"></div>
       <div id="game-area"></div>
       <div id="buzzer-wrap">
         <div id="buzz-status">—</div>

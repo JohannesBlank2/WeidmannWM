@@ -21,6 +21,9 @@ gameState.load();
 const registry = new Registry();
 registry.loadAll();
 
+// Registry in den State injizieren -> Pick-Ablauf kann 3 Spiele zusammenstellen.
+gameState.setRegistry(registry);
+
 // ---- Express ----------------------------------------------------------------
 const app = express();
 

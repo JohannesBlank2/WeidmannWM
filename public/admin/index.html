@@ -8,20 +8,33 @@
   <style>
     body { padding: 14px; max-width: 760px; margin: 0 auto; overflow-y: auto; height: 100vh; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     section.card { margin-bottom: 14px; }
     h2 { font-size: 1.1rem; }
-    .phase-steps { display: flex; gap: 8px; flex-wrap: wrap; }
-    .phase-steps button.active { background: var(--accent); color: #111; border-color: var(--accent); }
-    .team-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+
+    /* Ablauf */
+    .round-banner { font-size: 1.05rem; margin-bottom: 10px; }
+    .round-banner b { font-size: 1.2rem; }
+    .flow button { padding: 12px 14px; font-weight: 700; }
+    .pickrow { margin-top: 10px; }
+    .pickrow .lbl { color: var(--muted); font-size: .85rem; margin-bottom: 6px; }
+
+    /* Buzzer */
+    .phase-pill { padding: 4px 12px; border-radius: 999px; background: var(--panel);
+      border: 1px solid var(--line); text-transform: capitalize; font-size: .9rem; }
+
+    /* Teams */
+    .team-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
     .team-row .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
     .team-row input[type=text] {
-      flex: 1; min-width: 80px; background: var(--panel); border: 1px solid var(--line);
+      flex: 1; min-width: 90px; background: var(--panel); border: 1px solid var(--line);
       color: var(--text); border-radius: 8px; padding: 8px; font: inherit;
     }
-    .team-row .sc { font-weight: 800; font-size: 1.2rem; min-width: 2.5ch; text-align: center; }
-    .pts button { padding: 8px 10px; min-width: 42px; }
-    .clients { font-size: .9rem; }
+    .ptbox { display: inline-flex; align-items: center; gap: 6px; }
+    .ptbox .tag { color: var(--muted); font-size: .75rem; }
+    .ptbox .sc { font-weight: 800; font-size: 1.2rem; min-width: 2.2ch; text-align: center; }
+    .ptbox.game .sc { color: var(--accent); }
+    .ptbox button { padding: 8px 12px; min-width: 40px; }
+
     .client-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
       background: var(--panel); border: 1px solid var(--line); margin: 3px; }
     .client-pill .d { width: 9px; height: 9px; border-radius: 50%; }
@@ -34,13 +47,25 @@
 <body>
   <div class="row" style="justify-content:space-between; margin-bottom:10px;">
     <h1 style="margin:0; font-size:1.4rem;">🎛️ Admin</h1>
-    <span class="conn-badge offline" data-conn>getrennt</span>
+    <div class="row">
+      <span class="phase-pill" id="phase-pill">lobby</span>
+      <span class="conn-badge offline" data-conn>getrennt</span>
+    </div>
   </div>
 
-  <!-- Phasen -->
+  <!-- Ablauf / Runden -->
   <section class="card">
-    <h2>Phase</h2>
-    <div class="phase-steps" id="phases"></div>
+    <h2>Ablauf</h2>
+    <div class="round-banner" id="round-banner"></div>
+    <div class="flow row">
+      <button class="good" data-flow="show-start">▶ Show / Runde 1 starten</button>
+      <button data-flow="open-kategorie">📂 Kategorie-Auswahl öffnen</button>
+      <button class="bad" data-flow="stop-game">⏹ Spiel beenden → Auswertung</button>
+      <button class="primary" data-flow="next-round">⏭ Nächste Runde</button>
+      <button data-flow="goto-bonus">→ Bonus</button>
+      <button data-flow="goto-finale">→ Finale</button>
+    </div>
+    <div class="pickrow" id="picker-area"></div>
   </section>
 
   <!-- Buzzer -->
@@ -56,30 +81,33 @@
 
   <!-- Teams + Punkte -->
   <section class="card">
-    <h2>Teams & Punkte</h2>
+    <h2>Teams · Punkte</h2>
+    <div class="muted" style="font-size:.82rem; margin-bottom:6px;">
+      <b>Gesamt</b> = persistente Wertung (+1/-1) · <b>Spiel</b> = nur dieses Spiel (getrennt)
+    </div>
     <div id="teams"></div>
+    <div class="row" style="margin-top:10px;">
+      <button data-flow="reset-game-points">🔄 Spielpunkte auf 0</button>
+    </div>
   </section>
 
-  <!-- Spiele -->
+  <!-- Spiele (Direktstart / Test) -->
   <section class="card">
-    <h2>Spiele</h2>
+    <h2>Spiele <span class="muted" style="font-size:.8rem">(Direktstart / Test)</span></h2>
     <div id="active-game" class="muted" style="margin-bottom:8px;"></div>
     <div id="games"></div>
-    <div class="row" style="margin-top:10px;">
-      <button class="bad" id="stop-game">⏹ Spiel beenden</button>
-    </div>
   </section>
 
   <!-- Verbundene Geraete -->
   <section class="card">
     <h2>Verbundene Geraete</h2>
-    <div class="clients" id="clients"></div>
+    <div class="clients" id="clients" style="font-size:.9rem;"></div>
   </section>
 
   <!-- Gefahrenzone -->
   <section class="card">
     <h2>Zuruecksetzen</h2>
-    <button class="bad" id="reset-all">⚠️ Alles zuruecksetzen (Punkte & Teams)</button>
+    <button class="bad" id="reset-all">⚠️ Alles zuruecksetzen (Punkte & Ablauf)</button>
   </section>
 
   <script src="/socket.io/socket.io.js"></script>
