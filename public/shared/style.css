@@ -1,0 +1,92 @@
+/* Gemeinsames Styling fuer alle Ansichten. Dunkles Show-Theme. */
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --panel: #1c2230;
+  --line: #2b3242;
+  --text: #f0f3f8;
+  --muted: #8b95a7;
+  --accent: #ffd60a;
+  --good: #2ea043;
+  --bad: #e5484d;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+h1, h2, h3 { margin: 0 0 .4em; }
+
+.muted { color: var(--muted); }
+
+.conn-badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.conn-badge.online { color: var(--good); border-color: var(--good); }
+.conn-badge.offline { color: var(--bad); border-color: var(--bad); }
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 14px;
+  transition: transform .05s ease, background .15s ease;
+}
+button:active { transform: scale(.97); }
+button.primary { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 700; }
+button.good { background: var(--good); border-color: var(--good); color: #fff; }
+button.bad { background: var(--bad); border-color: var(--bad); color: #fff; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+/* ---- Punktetabelle (Display) ---- */
+.scoreboard { display: flex; gap: 14px; }
+.score-team {
+  flex: 1;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border-top: 6px solid var(--tc, #fff);
+  text-align: center;
+}
+.score-team .name { font-size: 1.1rem; font-weight: 600; opacity: .9; }
+.score-team .score { font-size: 2.6rem; font-weight: 800; line-height: 1.1; }
+
+/* ---- Sterne (Schwierigkeit) ---- */
+.stars { color: var(--accent); letter-spacing: 2px; }
+
+.game-fallback {
+  padding: 30px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+
+/* ---- QR ---- */
+.qr-grid { display: flex; gap: 30px; flex-wrap: wrap; }
+.qr-grid .qr img { background: #fff; padding: 10px; border-radius: 12px; width: 220px; height: 220px; }
+.qr-grid .qr { text-align: center; }

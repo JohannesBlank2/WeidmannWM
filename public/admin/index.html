@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Weidmann WM — Admin</title>
+  <link rel="stylesheet" href="/shared/style.css" />
+  <style>
+    body { padding: 14px; max-width: 760px; margin: 0 auto; overflow-y: auto; height: 100vh; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    section.card { margin-bottom: 14px; }
+    h2 { font-size: 1.1rem; }
+    .phase-steps { display: flex; gap: 8px; flex-wrap: wrap; }
+    .phase-steps button.active { background: var(--accent); color: #111; border-color: var(--accent); }
+    .team-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .team-row .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
+    .team-row input[type=text] {
+      flex: 1; min-width: 80px; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 8px; padding: 8px; font: inherit;
+    }
+    .team-row .sc { font-weight: 800; font-size: 1.2rem; min-width: 2.5ch; text-align: center; }
+    .pts button { padding: 8px 10px; min-width: 42px; }
+    .clients { font-size: .9rem; }
+    .client-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+      background: var(--panel); border: 1px solid var(--line); margin: 3px; }
+    .client-pill .d { width: 9px; height: 9px; border-radius: 50%; }
+    .game-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .game-item .info .nm { font-weight: 700; }
+    .game-item .info .mt { color: var(--muted); font-size: .85rem; }
+    .bigbtn { flex: 1; padding: 16px; font-size: 1.05rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+    <h1 style="margin:0; font-size:1.4rem;">🎛️ Admin</h1>
+    <span class="conn-badge offline" data-conn>getrennt</span>
+  </div>
+
+  <!-- Phasen -->
+  <section class="card">
+    <h2>Phase</h2>
+    <div class="phase-steps" id="phases"></div>
+  </section>
+
+  <!-- Buzzer -->
+  <section class="card">
+    <h2>Buzzer <span class="muted" id="buzz-state" style="font-size:.85rem"></span></h2>
+    <div class="row">
+      <button class="bigbtn good" data-buzz="arm">🟢 Freigeben</button>
+      <button class="bigbtn" data-buzz="reset">🔄 Zuruecksetzen</button>
+      <button class="bigbtn bad" data-buzz="lock">🔴 Sperren</button>
+    </div>
+    <div id="buzz-order" class="muted" style="margin-top:10px;"></div>
+  </section>
+
+  <!-- Teams + Punkte -->
+  <section class="card">
+    <h2>Teams & Punkte</h2>
+    <div id="teams"></div>
+  </section>
+
+  <!-- Spiele -->
+  <section class="card">
+    <h2>Spiele</h2>
+    <div id="active-game" class="muted" style="margin-bottom:8px;"></div>
+    <div id="games"></div>
+    <div class="row" style="margin-top:10px;">
+      <button class="bad" id="stop-game">⏹ Spiel beenden</button>
+    </div>
+  </section>
+
+  <!-- Verbundene Geraete -->
+  <section class="card">
+    <h2>Verbundene Geraete</h2>
+    <div class="clients" id="clients"></div>
+  </section>
+
+  <!-- Gefahrenzone -->
+  <section class="card">
+    <h2>Zuruecksetzen</h2>
+    <button class="bad" id="reset-all">⚠️ Alles zuruecksetzen (Punkte & Teams)</button>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>window.APP_ROLE = 'admin';</script>
+  <script src="/shared/client.js"></script>
+  <script src="./admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Weidmann WM — Display</title>
+  <link rel="stylesheet" href="/shared/style.css" />
+  <style>
+    body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    header.bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px; border-bottom: 1px solid var(--line); background: var(--bg2);
+    }
+    header.bar h1 { font-size: 1.6rem; margin: 0; }
+    .phase-pill {
+      padding: 6px 16px; border-radius: 999px; background: var(--panel);
+      border: 1px solid var(--line); font-size: 1rem; text-transform: capitalize;
+    }
+    main.stage {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 24px; position: relative; overflow: hidden;
+    }
+    #content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    .idle { text-align: center; color: var(--muted); }
+    .idle .big { font-size: 3rem; color: var(--text); margin-bottom: 10px; }
+    .game-head { text-align: center; }
+    .game-head .title { font-size: 2.4rem; font-weight: 800; }
+    .game-head .meta { color: var(--muted); margin-top: 6px; font-size: 1.2rem; }
+
+    footer.scores { padding: 18px 28px; border-top: 1px solid var(--line); background: var(--bg2); }
+
+    /* Buzzer-Gewinner-Overlay */
+    #winner {
+      position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center; flex-direction: column;
+      background: rgba(0,0,0,.65); z-index: 50;
+    }
+    #winner.show { display: flex; animation: pop .25s ease; }
+    #winner .wname { font-size: 5rem; font-weight: 900; }
+    #winner .wsub { font-size: 1.6rem; color: var(--muted); margin-top: 10px; }
+    @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    .qr-corner { position: absolute; right: 18px; bottom: 18px; text-align: center; opacity: .85; }
+    .qr-corner img { width: 120px; height: 120px; background: #fff; padding: 6px; border-radius: 10px; }
+    .qr-corner div { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <header class="bar">
+    <h1>🏆 Weidmann WM</h1>
+    <div>
+      <span class="phase-pill" id="phase">lobby</span>
+      <span class="conn-badge offline" data-conn>getrennt</span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div id="content"></div>
+    <div id="winner"><div class="wname"></div><div class="wsub">hat zuerst gebuzzert!</div></div>
+    <div class="qr-corner" id="join-qr">
+      <img id="qr-play" alt="QR" />
+      <div>Mitspielen → /play</div>
+    </div>
+  </main>
+
+  <footer class="scores">
+    <div class="scoreboard" id="scoreboard"></div>
+  </footer>
+
+  <!-- Buzzer-Sound (kurzer Beep via WebAudio, kein externes File noetig) -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>window.APP_ROLE = 'display';</script>
+  <script src="/shared/client.js"></script>
+  <script src="/shared/game-loader.js"></script>
+  <script src="./display.js"></script>
+</body>
+</html>

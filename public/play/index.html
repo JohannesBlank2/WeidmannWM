@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Weidmann WM — Spieler</title>
+  <link rel="stylesheet" href="/shared/style.css" />
+  <style>
+    body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    header.bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--bg2);
+    }
+    header.bar .who { font-weight: 700; }
+    main { flex: 1; display: flex; flex-direction: column; padding: 18px; gap: 16px; overflow: auto; }
+
+    /* Team-Auswahl */
+    .team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .team-btn {
+      padding: 26px 10px; font-size: 1.3rem; font-weight: 800; border-radius: 16px;
+      border: 3px solid var(--tc); background: var(--panel); color: var(--text);
+    }
+    .team-btn.active { background: var(--tc); color: #111; }
+
+    /* Buzzer */
+    #buzzer-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+    #buzzer {
+      width: min(70vw, 320px); height: min(70vw, 320px); border-radius: 50%;
+      font-size: 2rem; font-weight: 900; color: #fff; border: none;
+      background: radial-gradient(circle at 35% 30%, #ff5a5f, #b00d12);
+      box-shadow: 0 12px 0 #6d0a0d, 0 18px 30px rgba(0,0,0,.5);
+    }
+    #buzzer:active { transform: translateY(8px); box-shadow: 0 4px 0 #6d0a0d, 0 8px 16px rgba(0,0,0,.5); }
+    #buzzer:disabled { background: radial-gradient(circle at 35% 30%, #555, #333); box-shadow: 0 8px 0 #222; }
+    #buzz-status { font-size: 1.3rem; min-height: 1.6em; text-align: center; font-weight: 700; }
+
+    #game-area { width: 100%; }
+    .hint { text-align: center; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header class="bar">
+    <div class="who" id="who">Nicht zugeordnet</div>
+    <span class="conn-badge offline" data-conn>getrennt</span>
+  </header>
+
+  <main>
+    <!-- Schritt 1: Team waehlen -->
+    <section id="team-select" class="card">
+      <h2>Welches Team bist du?</h2>
+      <div class="team-grid" id="team-grid"></div>
+    </section>
+
+    <!-- Schritt 2: Spielbereich (Buzzer / Spiel-Modul) -->
+    <section id="play-area" style="display:none; flex:1; display:flex; flex-direction:column;">
+      <div id="game-area"></div>
+      <div id="buzzer-wrap">
+        <div id="buzz-status">—</div>
+        <button id="buzzer" disabled>BUZZ</button>
+        <div class="hint" id="phase-hint"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>window.APP_ROLE = 'play';</script>
+  <script src="/shared/client.js"></script>
+  <script src="/shared/game-loader.js"></script>
+  <script src="./play.js"></script>
+</body>
+</html>

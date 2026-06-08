@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Weidmann WM</title>
+  <link rel="stylesheet" href="/shared/style.css" />
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
+    h1 { font-size: 2.4rem; }
+    .links { display: flex; gap: 14px; margin: 20px 0 30px; flex-wrap: wrap; justify-content: center; }
+    .links a { text-decoration: none; }
+    .links button { font-size: 1.1rem; padding: 14px 22px; }
+  </style>
+</head>
+<body>
+  <h1>🏆 Weidmann WM</h1>
+  <p class="muted">Lokale Spieleshow — waehle eine Ansicht oder scanne einen QR-Code.</p>
+
+  <div class="links">
+    <a href="/display/"><button>📺 Display / TV</button></a>
+    <a href="/play/"><button class="primary">🎮 Spieler (iPad)</button></a>
+    <a href="/admin/"><button>🎛️ Admin</button></a>
+  </div>
+
+  <div class="qr-grid">
+    <div class="qr">
+      <h3>Spieler beitreten</h3>
+      <img id="qr-play" alt="QR Spieler" />
+    </div>
+    <div class="qr">
+      <h3>Admin</h3>
+      <img id="qr-admin" alt="QR Admin" />
+    </div>
+  </div>
+
+  <script>
+    const base = location.origin;
+    document.getElementById('qr-play').src =
+      '/qr?data=' + encodeURIComponent(base + '/play/');
+    document.getElementById('qr-admin').src =
+      '/qr?data=' + encodeURIComponent(base + '/admin/');
+  </script>
+</body>
+</html>
