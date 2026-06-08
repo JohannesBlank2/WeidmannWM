@@ -1,8 +1,4 @@
-/* Display-Ansicht (TV/Beamer).
- *  - Uebersicht: Gesamtpunkte + Rangliste (wer ist Erster).
- *  - Spiel-Modus: Spiel-Content + separate Spielpunkte (Start 0).
- *  - Buzzer-Effekte (Highlight + Sound).
- */
+/* Display-Ansicht (TV/Beamer). */
 (function () {
   const phaseEl = document.getElementById('phase');
   const scoreboardEl = document.getElementById('scoreboard');
@@ -23,12 +19,11 @@
   };
   const host = window.createGameHost(contentEl, ctx);
 
-  // ---- Punktetafel: Gesamt (mit Rang) vs. Spielpunkte ----
   function renderScoreboard(state) {
     const inGame = !!state.activeGame;
 
     if (inGame) {
-      boardLabelEl.textContent = `Spielpunkte · ${state.activeGame.name}`;
+      boardLabelEl.textContent = `Spielpunkte - ${state.activeGame.title || state.activeGame.name}`;
       const max = Math.max(0, ...state.teams.map((t) => t.gameScore));
       scoreboardEl.innerHTML = state.teams
         .map((t) => {
@@ -37,26 +32,23 @@
         <div class="score-team ${leader ? 'leader' : ''}" style="--tc:${t.color}">
           <div class="name">${escapeHtml(t.name)}</div>
           <div class="score">${t.gameScore}</div>
-          <div class="rank">${leader ? '★ vorn' : '&nbsp;'}</div>
+          <div class="rank">${leader ? 'vorn' : '&nbsp;'}</div>
         </div>`;
         })
         .join('');
       return;
     }
 
-    // Uebersicht: nach Gesamtpunkten sortiert, mit Platzierung.
     boardLabelEl.textContent = 'Gesamtwertung';
     const ranked = [...state.teams].sort((a, b) => b.score - a.score);
     scoreboardEl.innerHTML = ranked
       .map((t, i) => {
-        const place = i + 1;
-        // Gleichstand bekommt denselben Platz wie der Vorgaenger.
         const samePrev = i > 0 && ranked[i - 1].score === t.score;
-        const shownPlace = samePrev ? rankOf(ranked, t.score) : place;
+        const shownPlace = samePrev ? rankOf(ranked, t.score) : i + 1;
         const leader = shownPlace === 1;
         return `
         <div class="score-team ${leader ? 'leader' : ''}" style="--tc:${t.color}">
-          <div class="rank">${shownPlace}.${leader ? ' 👑' : ''}</div>
+          <div class="rank">${shownPlace}.</div>
           <div class="name">${escapeHtml(t.name)}</div>
           <div class="score">${t.score}</div>
         </div>`;
@@ -68,23 +60,20 @@
     return ranked.findIndex((t) => t.score === score) + 1;
   }
 
-  // ---- Buehne (Content je nach Phase / Spiel) ----
   function renderStage(state) {
-    // Aktives Spiel -> Spiel-Modul uebernimmt den Content-Bereich.
     if (state.activeGame) {
       joinQrEl.style.display = 'none';
       if (!contentEl.dataset.gameMounted) {
         const g = state.activeGame;
         contentEl.innerHTML = `
           <div class="game-head">
-            <div class="title">${escapeHtml(g.name)}</div>
-            <div class="meta">${g.kategorie} · ${stars(g.schwierigkeit)} · ${g.interaktionstyp}</div>
+            <div class="title">${escapeHtml(g.title || g.name)}</div>
+            <div class="meta">${categoryLabel(g.category)} - ${stars(g.difficulty || g.schwierigkeit)} - ${g.interaktionstyp}</div>
           </div>`;
       }
       return;
     }
 
-    // Kein Spiel aktiv -> Phasen-abhaengiger Screen.
     contentEl.dataset.gameMounted = '';
     joinQrEl.style.display = state.phase === 'lobby' ? 'block' : 'none';
 
@@ -92,33 +81,43 @@
     const picker = r.pickerTeamId && state.teams.find((t) => t.id === r.pickerTeamId);
     const pickerHtml = picker
       ? `<span style="color:${picker.color}">${escapeHtml(picker.name)}</span>`
-      : '—';
+      : '-';
 
     if (state.phase === 'runden-uebersicht') {
       contentEl.innerHTML = idle(
         `Runde ${r.number} / ${r.total}`,
-        `Modus: <b>${r.modus}</b> &nbsp;·&nbsp; Auswahl: ${pickerHtml}`
+        `Modus: <b>${modeLabel(r.mode)}</b> &nbsp; Auswahl: ${pickerHtml}`
       );
     } else if (state.phase === 'kategorie-auswahl') {
+      const cats = (r.availableCategories || []).map(categoryLabel).join(' &nbsp; ');
       contentEl.innerHTML = idle(
         'Kategorie-Auswahl',
-        `${pickerHtml} waehlt eine Kategorie &nbsp;(Modus ${r.modus})`
+        `${pickerHtml} waehlt eine Kategorie<br><span class="muted">${cats}</span>`
       );
     } else if (state.phase === 'spiel-auswahl') {
+      if (!r.choices.length) {
+        contentEl.innerHTML = idle(
+          'Keine offenen Spiele',
+          'Alle Spiele in dieser Kategorie wurden bereits gespielt.'
+        );
+        return;
+      }
       const cards = r.choices
-        .map(
-          (c) => `
+        .map((c) => `
         <div class="choice-card">
-          <div class="cn">${escapeHtml(c.name)}</div>
-          <div class="cm">${stars(c.schwierigkeit)} · ${c.interaktionstyp}</div>
-        </div>`
-        )
+          <div class="cn">${escapeHtml(c.title || c.name)}</div>
+          <div class="cm">${stars(c.difficulty || c.schwierigkeit)} - ${c.responsiblePerson ? escapeHtml(c.responsiblePerson) : 'offen'}</div>
+        </div>`)
         .join('');
       contentEl.innerHTML = `
         <div class="choices-wrap">
-          <div class="choices-title">${pickerHtml} waehlt ein Spiel · <b>${r.kategorie || ''}</b></div>
+          <div class="choices-title">${pickerHtml} waehlt ein Spiel - <b>${categoryLabel(r.category)}</b></div>
           <div class="choices">${cards}</div>
         </div>`;
+    } else if (state.phase === 'spiel-details') {
+      contentEl.innerHTML = gameDetails(r.selectedGame, 'Spiel starten, wenn alles bereit ist.');
+    } else if (state.phase === 'spielerauswahl') {
+      contentEl.innerHTML = playerSelection(state);
     } else if (state.phase === 'auswertung') {
       const max = Math.max(0, ...state.teams.map((t) => t.gameScore));
       const winners = state.teams.filter((t) => t.gameScore === max && max > 0);
@@ -131,12 +130,39 @@
         : 'Admin vergibt die Gesamtpunkte.';
       contentEl.innerHTML = idle('Auswertung', sub);
     } else if (state.phase === 'bonus') {
-      contentEl.innerHTML = idle('⭐ Bonus-Runde', 'Kommt spaeter.');
+      contentEl.innerHTML = idle('Bonus-Runde', 'Kommt spaeter.');
     } else if (state.phase === 'finale') {
-      contentEl.innerHTML = idle('🏁 Finale', 'Kommt spaeter.');
+      contentEl.innerHTML = idle('Finale', 'Kommt spaeter.');
     } else {
-      contentEl.innerHTML = idle('Willkommen', 'Teams treten bei — /play auf den iPads oeffnen.');
+      contentEl.innerHTML = idle('Willkommen', 'Teams treten bei - /play auf den iPads oeffnen.');
     }
+  }
+
+  function gameDetails(game, sub) {
+    if (!game) return idle('Spielauswahl', 'Kein Spiel ausgewaehlt.');
+    return `
+      <div class="choices-wrap">
+        <div class="game-head">
+          <div class="title">${escapeHtml(game.title || game.name)}</div>
+          <div class="meta">${categoryLabel(game.category)} - ${stars(game.difficulty || game.schwierigkeit)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</div>
+        </div>
+        <div class="choice-card" style="max-width:760px;margin:24px auto;text-align:left;">
+          ${detailRow('Kurzbeschreibung', game.description)}
+          ${detailRow('Material', (game.materials || []).join(', '))}
+          ${detailRow('Regeln', game.rules)}
+        </div>
+        <div class="muted">${sub || ''}</div>
+      </div>`;
+  }
+
+  function playerSelection(state) {
+    const selected = state.round.selectedPlayers || {};
+    const rows = state.teams.map((t) => {
+      const idx = selected[t.id];
+      const name = idx != null && t.players[idx] ? t.players[idx].name : 'offen';
+      return `<div class="choice-card"><div class="cn" style="color:${t.color}">${escapeHtml(t.name)}</div><div class="cm">${escapeHtml(name)}</div></div>`;
+    }).join('');
+    return `<div class="choices-wrap"><div class="choices-title">Spielerauswahl</div><div class="choices">${rows}</div></div>`;
   }
 
   function idle(big, sub) {
@@ -150,7 +176,6 @@
     host.sync(state);
   });
 
-  // ---- Buzzer-Effekte ----
   App.socket.on('fx:buzzer-armed', () => beep(660, 0.12));
 
   App.socket.on('fx:buzzer-winner', (w) => {
@@ -162,7 +187,6 @@
     setTimeout(() => winnerEl.classList.remove('show'), 3500);
   });
 
-  // ---- Helpers ----
   let audioCtx = null;
   function beep(freq, dur) {
     try {
@@ -182,9 +206,19 @@
     }
   }
 
-  function stars(n) { return '★'.repeat(n) + '☆'.repeat(3 - n); }
+  function detailRow(label, value) {
+    return value ? `<div style="margin-top:10px;"><b>${label}:</b> ${escapeHtml(value)}</div>` : '';
+  }
+  function modeLabel(mode) { return mode === 'group' ? 'Gruppenspiel' : 'Einzelspiel'; }
+  function categoryLabel(category) {
+    return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
+  }
+  function stars(n) {
+    const value = Math.min(3, Math.max(1, Number(n) || 1));
+    return '*'.repeat(value) + '-'.repeat(3 - value);
+  }
   function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) =>
+    return String(s || '').replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 

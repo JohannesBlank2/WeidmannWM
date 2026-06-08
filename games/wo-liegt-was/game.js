@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "wo-liegt-was",
-  name: "Wo liegt was",
-  kategorie: "quiz",
-  modus: "gemeinsam",
+  id: 'wo-liegt-was',
+  mode: 'group',
+  category: 'quiz',
+  title: 'Wo liegt was',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Orte oder Begriffe muessen auf einer Karte oder Skala eingeordnet werden.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Karte oder Anzeige', 'Loesungen'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

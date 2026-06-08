@@ -5,9 +5,9 @@ const path = require('path');
 
 const GAMES_DIR = path.join(__dirname, '..', 'games');
 
-const KATEGORIEN = ['sport', 'quiz', 'geschicklichkeit'];
+const KATEGORIEN = ['sport', 'skill', 'quiz'];
 const INTERAKTIONEN = ['buzzer', 'multiple-choice', 'karte', 'schaetzen', 'keine'];
-const MODI = ['einzeln', 'gemeinsam'];
+const MODI = ['single', 'group'];
 
 // Id des Demo-/Platzhalterspiels. built:false-Spiele laden dessen Module.
 const DEMO_GAME_ID = 'buzzer-test';
@@ -18,10 +18,21 @@ const DEMO_GAME_ID = 'buzzer-test';
  * Fehlt das Feld, gilt das Spiel in BEIDEN Modi (sicherer Default fuer Demo).
  */
 function normalizeModus(value) {
-  if (value === 'beide' || value == null) return ['einzeln', 'gemeinsam'];
+  if (value === 'beide' || value == null) return ['single', 'group'];
   const arr = Array.isArray(value) ? value : [value];
-  const out = arr.filter((m) => MODI.includes(m));
-  return out.length ? out : ['einzeln', 'gemeinsam'];
+  const out = arr
+    .map((m) => {
+      if (m === 'einzeln') return 'single';
+      if (m === 'gemeinsam') return 'group';
+      return m;
+    })
+    .filter((m) => MODI.includes(m));
+  return out.length ? out : ['single', 'group'];
+}
+
+function normalizeCategory(value) {
+  if (value === 'geschicklichkeit') return 'skill';
+  return KATEGORIEN.includes(value) ? value : 'quiz';
 }
 
 /**
@@ -33,9 +44,15 @@ function normalizeModus(value) {
  *
  * Erwartetes Schema von game.js:
  *   {
- *     id, name,
- *     kategorie:       'sport' | 'quiz' | 'geschicklichkeit' | 'gruppe',
- *     schwierigkeit:   1 | 2 | 3,
+ *     id,
+ *     mode:            'single' | 'group' | ['single','group'],
+ *     category:        'sport' | 'skill' | 'quiz',
+ *     title,
+ *     responsiblePerson,
+ *     difficulty:      1 | 2 | 3,
+ *     description,
+ *     rules,
+ *     materials:       string[],
  *     interaktionstyp: 'buzzer' | 'multiple-choice' | 'karte' | 'schaetzen' | 'keine',
  *     // optionale Server-Hooks (alle bekommen ein ctx-Objekt, siehe sockets.js):
  *     onStart(ctx)            {}
@@ -84,12 +101,12 @@ class Registry {
       console.warn(`[registry] ${folderName}/game.js hat keine id -> uebersprungen.`);
       return null;
     }
-    const kategorie = KATEGORIEN.includes(def.kategorie) ? def.kategorie : 'quiz';
+    const kategorie = normalizeCategory(def.category || def.kategorie);
     const interaktionstyp = INTERAKTIONEN.includes(def.interaktionstyp)
       ? def.interaktionstyp
       : 'keine';
-    const schwierigkeit = Math.min(3, Math.max(1, Number(def.schwierigkeit) || 1));
-    const modus = normalizeModus(def.modus);
+    const schwierigkeit = Math.min(3, Math.max(1, Number(def.difficulty || def.schwierigkeit) || 1));
+    const modus = normalizeModus(def.mode || def.modus);
     // built default true; nur explizit built:false ist ein Platzhalter.
     const built = def.built !== false;
     // demo = das Platzhalterspiel selbst (nicht im Pick-Pool).
@@ -97,10 +114,19 @@ class Registry {
 
     return {
       id: def.id,
-      name: def.name || def.id,
+      name: def.title || def.name || def.id,
+      title: def.title || def.name || def.id,
       kategorie,
+      category: kategorie,
       modus,
+      mode: modus,
       schwierigkeit,
+      difficulty: schwierigkeit,
+      responsiblePerson: def.responsiblePerson || '',
+      description: def.description || '',
+      rules: def.rules || '',
+      materials: Array.isArray(def.materials) ? def.materials : [],
+      hasBeenPlayed: def.hasBeenPlayed === true,
       interaktionstyp,
       built,
       demo,
@@ -122,9 +148,18 @@ class Registry {
     return Array.from(this.games.values()).map((g) => ({
       id: g.id,
       name: g.name,
+      title: g.title,
       kategorie: g.kategorie,
+      category: g.category,
       modus: g.modus,
+      mode: g.mode,
       schwierigkeit: g.schwierigkeit,
+      difficulty: g.difficulty,
+      responsiblePerson: g.responsiblePerson,
+      description: g.description,
+      rules: g.rules,
+      materials: g.materials,
+      hasBeenPlayed: g.hasBeenPlayed,
       interaktionstyp: g.interaktionstyp,
       built: g.built,
       demo: g.demo,
@@ -139,9 +174,18 @@ class Registry {
     return {
       id: g.id,
       name: g.name,
+      title: g.title,
       kategorie: g.kategorie,
+      category: g.category,
       modus: g.modus,
+      mode: g.mode,
       schwierigkeit: g.schwierigkeit,
+      difficulty: g.difficulty,
+      responsiblePerson: g.responsiblePerson,
+      description: g.description,
+      rules: g.rules,
+      materials: g.materials,
+      hasBeenPlayed: g.hasBeenPlayed,
       interaktionstyp: g.interaktionstyp,
       built: g.built,
       folder: g.folder,
@@ -157,27 +201,47 @@ class Registry {
    * Spiele zur Auswahl fuer den Pick-Ablauf: passender modus + kategorie,
    * nicht das Demo, noch nicht verbraucht. Normal 3, weniger falls verbraucht.
    */
-  buildChoices(modus, kategorie, consumed = []) {
-    return this.pool()
+  buildChoices(modus, kategorie, consumed = [], options = {}) {
+    const mode = normalizeModus(modus)[0];
+    const category = normalizeCategory(kategorie);
+    const includePlayed = options.includePlayed === true;
+    const candidates = this.pool()
       .filter(
         (g) =>
-          g.modus.includes(modus) &&
-          g.kategorie === kategorie &&
-          !consumed.includes(g.id)
-      )
+          g.mode.includes(mode) &&
+          g.category === category &&
+          (includePlayed || !consumed.includes(g.id))
+      );
+
+    return candidates
+      .slice(0, 3)
       .map((g) => ({
         gameId: g.id,
+        id: g.id,
         name: g.name,
+        title: g.title,
         kategorie: g.kategorie,
+        category: g.category,
+        modus: g.modus,
+        mode: g.mode,
         schwierigkeit: g.schwierigkeit,
+        difficulty: g.difficulty,
+        responsiblePerson: g.responsiblePerson,
+        description: g.description,
+        rules: g.rules,
+        materials: g.materials,
         interaktionstyp: g.interaktionstyp,
         built: g.built,
+        hasBeenPlayed: consumed.includes(g.id),
       }));
   }
 
   /** Kategorien, die fuer den Modus noch >=1 ungespieltes Spiel haben. */
   availableKategorien(modus, consumed = []) {
-    return KATEGORIEN.filter((k) => this.buildChoices(modus, k, consumed).length > 0);
+    const mode = normalizeModus(modus)[0];
+    return KATEGORIEN.filter((k) =>
+      this.pool().some((g) => g.mode.includes(mode) && g.category === k)
+    );
   }
 }
 

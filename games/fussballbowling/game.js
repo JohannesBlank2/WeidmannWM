@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "fussballbowling",
-  name: "Fußballbowling",
-  kategorie: "sport",
-  modus: "einzeln",
+  id: 'fussballbowling',
+  mode: 'single',
+  category: 'sport',
+  title: 'Fussballbowling',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Kegeln mit einem Fussball.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Fussball', 'Kegel oder Flaschen'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

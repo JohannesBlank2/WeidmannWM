@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "schneid-in-die-haelfte",
-  name: "Schneid in die Hälfte",
-  kategorie: "geschicklichkeit",
-  modus: "einzeln",
+  id: 'schneid-in-die-haelfte',
+  mode: 'single',
+  category: 'skill',
+  title: 'Schneid in die Haelfte',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Ein Objekt oder eine Vorlage soll moeglichst genau halbiert werden.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Vorlage', 'Schneidewerkzeug'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

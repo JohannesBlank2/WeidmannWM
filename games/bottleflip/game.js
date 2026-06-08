@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "bottleflip",
-  name: "Bottleflip",
-  kategorie: "geschicklichkeit",
-  modus: "einzeln",
+  id: 'bottleflip',
+  mode: 'single',
+  category: 'skill',
+  title: 'Bottleflip',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Eine Flasche muss geworfen und stehend gelandet werden.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Flaschen', 'Markierung'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

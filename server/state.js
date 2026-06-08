@@ -10,7 +10,8 @@ const STATE_FILE = path.join(__dirname, '..', 'state.json');
 //   runden-uebersicht-> Runde X angekuendigt (Modus + auswaehlendes Team)
 //   kategorie-auswahl-> auswaehlendes Team waehlt Kategorie
 //   spiel-auswahl    -> ungespielte Spiele der Kategorie werden gezeigt, Team waehlt
-//   spielerauswahl   -> NUR bei einzeln: jedes Team waehlt seinen Spieler
+//   spiel-details    -> gewaehltes Spiel wird mit Details gezeigt, Startbutton
+//   spielerauswahl   -> NUR bei single: jedes Team waehlt seinen Spieler
 //   spiel-aktiv      -> Spiel laeuft (Spielpunkte + Buzzer)
 //   auswertung       -> Spielpunkte stehen, Admin vergibt Gesamtpunkte
 //   bonus / finale   -> Sonderphasen (hier nur als Phase vorgesehen)
@@ -19,6 +20,7 @@ const PHASES = [
   'runden-uebersicht',
   'kategorie-auswahl',
   'spiel-auswahl',
+  'spiel-details',
   'spielerauswahl',
   'spiel-aktiv',
   'auswertung',
@@ -34,18 +36,18 @@ const TEAM_COLORS = ['#e63946', '#2a9d8f', '#f4a261', '#4361ee'];
 // Max. Anzahl Einzelspiele pro Spieler (4 Einzelrunden / 2 Spieler = je 2).
 const MAX_EINZEL_PRO_SPIELER = 2;
 
-// Runden-Plan: 8 Spiele. Modus wechselt (einzeln/gemeinsam, Start einzeln),
+// Runden-Plan: 8 Spiele. Modus wechselt (single/group, Start single),
 // Pick-Reihenfolge ist eine "Snake" 1-2-3-4-4-3-2-1.
 // picker = 1-basierte Teamposition (Team 1..4).
 const ROUND_PLAN = [
-  { modus: 'einzeln', picker: 1 },
-  { modus: 'gemeinsam', picker: 2 },
-  { modus: 'einzeln', picker: 3 },
-  { modus: 'gemeinsam', picker: 4 },
-  { modus: 'einzeln', picker: 4 },
-  { modus: 'gemeinsam', picker: 3 },
-  { modus: 'einzeln', picker: 2 },
-  { modus: 'gemeinsam', picker: 1 },
+  { mode: 'single', picker: 1 },
+  { mode: 'group', picker: 2 },
+  { mode: 'single', picker: 3 },
+  { mode: 'group', picker: 4 },
+  { mode: 'single', picker: 4 },
+  { mode: 'group', picker: 3 },
+  { mode: 'single', picker: 2 },
+  { mode: 'group', picker: 1 },
 ];
 const TOTAL_ROUNDS = ROUND_PLAN.length;
 
@@ -72,12 +74,16 @@ function defaultRound() {
     number: 0, // 1..8, 0 = Show noch nicht gestartet
     index: -1, // 0-basierter Index in ROUND_PLAN
     total: TOTAL_ROUNDS,
-    modus: null, // 'einzeln' | 'gemeinsam'
+    mode: null, // 'single' | 'group'
+    modus: null, // Kompatibilitaet: 'einzeln' | 'gemeinsam'
     pickerTeamId: null, // welches Team gerade auswaehlt
-    kategorie: null, // gewaehlte Kategorie
+    category: null, // 'sport' | 'skill' | 'quiz'
+    kategorie: null, // Kompatibilitaet: 'sport' | 'quiz' | 'geschicklichkeit'
+    availableCategories: [],
     availableKategorien: [], // Kategorien mit noch ungespielten Spielen (Modus)
     choices: [], // zur Auswahl stehende (ungespielte) Spiele
     gameId: null, // gewaehltes Spiel (vor/waehrend Spielerauswahl)
+    selectedGame: null, // vollstaendige Details aus den Choices
     selectedPlayers: {}, // { teamId: playerIndex } bei Einzelspielen
   };
 }
@@ -158,7 +164,7 @@ class GameState {
           players: normalizePlayers(t.players),
         })),
         buzzer: { ...base.buzzer, ...(saved.buzzer || {}) },
-        round: { ...base.round, ...(saved.round || {}) },
+        round: normalizeRound({ ...base.round, ...(saved.round || {}) }),
         consumedGames: Array.isArray(saved.consumedGames) ? saved.consumedGames : [],
         meta: { ...base.meta, ...(saved.meta || {}) },
         clients: saved.clients || {},
@@ -352,11 +358,13 @@ class GameState {
     const plan = ROUND_PLAN[index];
     if (!plan) return;
     const pickerTeam = this.state.teams[plan.picker - 1];
+    const mode = plan.mode || germanToMode(plan.modus);
     this.state.round = {
       ...defaultRound(),
       number: index + 1,
       index,
-      modus: plan.modus,
+      mode,
+      modus: modeToGerman(mode),
       pickerTeamId: pickerTeam ? pickerTeam.id : null,
     };
   }
@@ -374,12 +382,15 @@ class GameState {
   openKategorieAuswahl() {
     if (this.state.round.number < 1) this._applyRound(0);
     this.state.round.kategorie = null;
+    this.state.round.category = null;
     this.state.round.choices = [];
     this.state.round.gameId = null;
+    this.state.round.selectedGame = null;
     this.state.round.selectedPlayers = {};
-    this.state.round.availableKategorien = this.registry
-      ? this.registry.availableKategorien(this.state.round.modus, this.state.consumedGames)
+    this.state.round.availableCategories = this.registry
+      ? this.registry.availableKategorien(this.state.round.mode, this.state.consumedGames)
       : [];
+    this.state.round.availableKategorien = this.state.round.availableCategories.map(categoryToGerman);
     this.state.phase = 'kategorie-auswahl';
     this.touch();
   }
@@ -392,43 +403,68 @@ class GameState {
     if (this.state.phase !== 'kategorie-auswahl') return false;
     if (!force && teamId !== this.state.round.pickerTeamId) return false;
     if (!this.registry) return false;
-    if (!this.state.round.availableKategorien.includes(kategorie)) return false;
+    const category = normalizeCategory(kategorie);
+    if (!this.state.round.availableCategories.includes(category)) return false;
 
     const choices = this.registry.buildChoices(
-      this.state.round.modus,
-      kategorie,
+      this.state.round.mode,
+      category,
       this.state.consumedGames
     );
-    if (!choices.length) return false;
 
-    this.state.round.kategorie = kategorie;
+    this.state.round.category = category;
+    this.state.round.kategorie = categoryToGerman(category);
     this.state.round.choices = choices;
+    this.state.round.gameId = null;
+    this.state.round.selectedGame = null;
     this.state.phase = 'spiel-auswahl';
     this.touch();
     return true;
   }
 
   /**
-   * Ein Spiel aus den Choices wurde gewaehlt.
-   *  - einzeln  -> Spielerauswahl (Spiel startet erst danach). Gibt false zurueck.
-   *  - gemeinsam-> Spiel startet sofort. Gibt true zurueck (Aufrufer feuert onStart).
+   * Ein Spiel aus den Choices wurde gewaehlt. Es startet noch nicht sofort,
+   * sondern wird zuerst in der Detailansicht bestaetigt.
    */
   chooseSpiel(teamId, gameId, force = false) {
     if (this.state.phase !== 'spiel-auswahl') return false;
     if (!force && teamId !== this.state.round.pickerTeamId) return false;
-    if (!this.state.round.choices.some((c) => c.gameId === gameId)) return false;
+    const choice = this.state.round.choices.find((c) => c.gameId === gameId);
+    if (!choice) return false;
 
     this.state.round.gameId = gameId;
+    this.state.round.selectedGame = choice;
+    this.state.phase = 'spiel-details';
+    this.touch();
+    return true;
+  }
 
-    if (this.state.round.modus === 'einzeln') {
+  /** Zurueck zur Kategorie-Auswahl, z.B. wenn die Vorschlaege nicht passen. */
+  backToKategorieAuswahl(teamId, force = false) {
+    if (!['spiel-auswahl', 'spiel-details'].includes(this.state.phase)) return false;
+    if (!force && teamId !== this.state.round.pickerTeamId) return false;
+    this.openKategorieAuswahl();
+    return true;
+  }
+
+  /**
+   * Startbutton nach der Detailansicht.
+   *  - single -> zuerst Spielerwahl
+   *  - group  -> Spiel startet direkt
+   */
+  startPickedGame(teamId, force = false) {
+    if (this.state.phase !== 'spiel-details') return false;
+    if (!force && teamId !== this.state.round.pickerTeamId) return false;
+    const gameId = this.state.round.gameId;
+    if (!gameId) return false;
+
+    if (this.state.round.mode === 'single') {
       this.state.round.selectedPlayers = {};
       this.state.phase = 'spielerauswahl';
       this.touch();
-      return false; // Spiel startet erst nach Spielerauswahl
+      return false;
     }
 
-    // Gruppenspiel: beide Spieler spielen, kein Spieler-Limit, sofort starten.
-    this._consume(gameId);
     return this.startGame(gameId);
   }
 
@@ -452,13 +488,14 @@ class GameState {
     if (this.state.phase !== 'spielerauswahl') return false;
     const gameId = this.state.round.gameId;
     if (!gameId) return false;
+    const selectedTeamCount = Object.keys(this.state.round.selectedPlayers).length;
+    if (selectedTeamCount < this.state.teams.length) return false;
 
     // Einzelspiel-Zaehler der gewaehlten Spieler erhoehen.
     for (const [teamId, idx] of Object.entries(this.state.round.selectedPlayers)) {
       const team = this._team(teamId);
       if (team && team.players[idx]) team.players[idx].einzelCount += 1;
     }
-    this._consume(gameId);
     return this.startGame(gameId);
   }
 
@@ -488,6 +525,9 @@ class GameState {
 
   /** Beendet das laufende Spiel -> Auswertung (Spielpunkte bleiben sichtbar). */
   endGame() {
+    if (this.state.activeGame && this.state.activeGame.id) {
+      this._consume(this.state.activeGame.id);
+    }
     this.state.activeGame = null;
     this.state.gameState = {};
     this.state.buzzer = { status: BUZZER.LOCKED, presses: [] };
@@ -557,6 +597,52 @@ function normalizePlayers(players) {
     name: (players[i] && players[i].name) || def.name,
     einzelCount: Number(players[i] && players[i].einzelCount) || 0,
   }));
+}
+
+function germanToMode(value) {
+  if (value === 'einzeln') return 'single';
+  if (value === 'gemeinsam') return 'group';
+  if (value === 'single' || value === 'group') return value;
+  return null;
+}
+
+function modeToGerman(value) {
+  return value === 'group' ? 'gemeinsam' : 'einzeln';
+}
+
+function normalizeCategory(value) {
+  if (value === 'geschicklichkeit') return 'skill';
+  if (value === 'skill') return 'skill';
+  if (value === 'sport') return 'sport';
+  return 'quiz';
+}
+
+function categoryToGerman(value) {
+  return value === 'skill' ? 'geschicklichkeit' : value;
+}
+
+function normalizeRound(round) {
+  const mode = round.mode || germanToMode(round.modus);
+  const category = round.category || (round.kategorie ? normalizeCategory(round.kategorie) : null);
+  return {
+    ...defaultRound(),
+    ...round,
+    mode,
+    modus: mode ? modeToGerman(mode) : null,
+    category,
+    kategorie: category ? categoryToGerman(category) : null,
+    availableCategories: Array.isArray(round.availableCategories)
+      ? round.availableCategories.map(normalizeCategory)
+      : Array.isArray(round.availableKategorien)
+      ? round.availableKategorien.map(normalizeCategory)
+      : [],
+    availableKategorien: Array.isArray(round.availableKategorien)
+      ? round.availableKategorien
+      : Array.isArray(round.availableCategories)
+      ? round.availableCategories.map(categoryToGerman)
+      : [],
+    selectedGame: round.selectedGame || null,
+  };
 }
 
 module.exports = {

@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "labyrinth",
-  name: "Labyrinth",
-  kategorie: "geschicklichkeit",
-  modus: "gemeinsam",
+  id: 'labyrinth',
+  mode: 'group',
+  category: 'skill',
+  title: 'Labyrinth',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Teams steuern gemeinsam ein Objekt durch ein Labyrinth.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Labyrinth', 'Kugel oder Spielfigur'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

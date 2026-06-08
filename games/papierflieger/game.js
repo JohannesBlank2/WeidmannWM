@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "papierflieger",
-  name: "Papierflieger",
-  kategorie: "geschicklichkeit",
-  modus: "gemeinsam",
+  id: 'papierflieger',
+  mode: 'group',
+  category: 'skill',
+  title: 'Papierflieger',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Teams bauen und werfen Papierflieger.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Papier', 'Messband oder Zielmarkierung'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "partner-zielwurf",
-  name: "Partner Zielwurf",
-  kategorie: "sport",
-  modus: "gemeinsam",
+  id: 'partner-zielwurf',
+  mode: 'group',
+  category: 'sport',
+  title: 'Partner Zielwurf',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Ein Partner wirft, der andere arbeitet mit einem Zielbehaelter.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Wurfobjekte', 'Zielkiste'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

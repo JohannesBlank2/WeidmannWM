@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "fehlersuche",
-  name: "Fehlersuche",
-  kategorie: "quiz",
-  modus: "einzeln",
+  id: 'fehlersuche',
+  mode: 'single',
+  category: 'quiz',
+  title: 'Fehlersuche',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'In Bildern oder Szenen muessen Unterschiede gefunden werden.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Fehlersuche-Bilder'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

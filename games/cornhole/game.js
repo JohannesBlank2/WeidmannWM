@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "cornhole",
-  name: "Cornhole",
-  kategorie: "sport",
-  modus: "einzeln",
+  id: 'cornhole',
+  mode: 'single',
+  category: 'sport',
+  title: 'Cornhole',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Wurfspiel auf ein Zielbrett mit Loch.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Cornhole-Board', 'Wurfsaeckchen'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

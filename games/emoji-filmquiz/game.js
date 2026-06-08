@@ -6,19 +6,19 @@
  *
  * FERTIGSTELLEN: built auf true setzen und in DIESEM Ordner display.js + play.js
  * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp/
- * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
+ * difficulty anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: 'ferngesteuerte-scharade',
+  id: 'emoji-filmquiz',
   mode: 'group',
-  category: 'skill',
-  title: 'Ferngesteuerte Scharade',
+  category: 'quiz',
+  title: 'Emoji Filmquiz',
   responsiblePerson: 'TBD',
   difficulty: 1,
-  description: 'Ein Teammitglied wird angeleitet und stellt Begriffe dar.',
-  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
-  materials: ['Begriffskarten'],
+  description: 'Mehrere Filmtitel werden nur durch Emojis dargestellt. Die Teams muessen erraten, welcher Film gemeint ist.',
+  rules: 'Teams nennen oder buzzern den gesuchten Filmtitel. Die genaue Wertung wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Emoji-Filmraetsel', 'Loesungsliste'],
   hasBeenPlayed: false,
-  interaktionstyp: 'keine', // TBD beim Bauen
+  interaktionstyp: 'keine',
   built: false,
 };

@@ -14,10 +14,15 @@
  */
 module.exports = {
   id: 'buzzer-test',
-  name: 'Buzzer-Test',
-  kategorie: 'quiz',
-  modus: 'beide', // 'einzeln' | 'gemeinsam' | 'beide' | ['einzeln','gemeinsam']
-  schwierigkeit: 1,
+  mode: ['single', 'group'],
+  category: 'quiz',
+  title: 'Buzzer-Test',
+  responsiblePerson: 'System',
+  difficulty: 1,
+  description: 'Demo- und Platzhalterspiel fuer noch nicht gebaute Spiele.',
+  rules: 'Admin gibt den Buzzer frei. Das zuerst buzzernde Team wird erfasst.',
+  materials: [],
+  hasBeenPlayed: false,
   interaktionstyp: 'buzzer',
   built: true, // echtes Demo-Modul
   demo: true, // Platzhalter fuer alle built:false-Spiele; NICHT im Pick-Pool

@@ -82,15 +82,31 @@ function attachSockets(io, gameState, registry) {
 
     socket.on('pick:spiel', ({ gameId } = {}) => {
       if (!clientId) return;
-      // einzeln -> Spielerauswahl (false), gemeinsam -> Start sofort (true).
-      const started = gameState.chooseSpiel(gameState.teamOfClient(clientId), gameId);
+      gameState.chooseSpiel(gameState.teamOfClient(clientId), gameId);
+    });
+
+    socket.on('pick:start-game', () => {
+      if (!clientId) return;
+      const started = gameState.startPickedGame(gameState.teamOfClient(clientId));
       if (started) runActiveGameHook('onStart');
+    });
+
+    socket.on('pick:back-to-categories', () => {
+      if (!clientId) return;
+      gameState.backToKategorieAuswahl(gameState.teamOfClient(clientId));
     });
 
     // Spielerauswahl (nur Einzelspiele): jedes Team waehlt seinen Spieler.
     socket.on('pick:spieler', ({ playerIndex } = {}) => {
       if (!clientId) return;
       gameState.selectPlayer(gameState.teamOfClient(clientId), playerIndex);
+    });
+
+    socket.on('pick:start-selected-game', () => {
+      if (!clientId) return;
+      const state = gameState.get();
+      if (gameState.teamOfClient(clientId) !== state.round.pickerTeamId) return;
+      if (gameState.startSelectedGame()) runActiveGameHook('onStart');
     });
 
     // ---- Buzzer (Spieler) ---------------------------------------------------
@@ -154,11 +170,19 @@ function attachSockets(io, gameState, registry) {
       gameState.chooseKategorie(null, kategorie, true));
 
     socket.on('admin:pick-spiel', ({ gameId } = {}) => {
-      if (gameState.chooseSpiel(null, gameId, true)) runActiveGameHook('onStart');
+      gameState.chooseSpiel(null, gameId, true);
     });
 
     socket.on('admin:pick-spieler', ({ teamId, playerIndex } = {}) =>
       gameState.selectPlayer(teamId, playerIndex));
+
+    socket.on('admin:start-picked-game', () => {
+      if (gameState.startPickedGame(null, true)) runActiveGameHook('onStart');
+    });
+
+    socket.on('admin:back-to-categories', () => {
+      gameState.backToKategorieAuswahl(null, true);
+    });
 
     // Nach der Spielerauswahl: Einzelspiel starten (Zaehler hochzaehlen).
     socket.on('admin:start-selected-game', () => {

@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "video-hanni-richi",
-  name: "Video (Hanni vs. Richi)",
-  kategorie: "quiz",
-  modus: "gemeinsam",
+  id: 'video-hanni-richi',
+  mode: 'group',
+  category: 'quiz',
+  title: 'Video (Hanni vs. Richi)',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Teams beantworten Fragen oder treffen Entscheidungen zu einem Video.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Video', 'Abspielgeraet'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

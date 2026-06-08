@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "musik-erraten",
-  name: "Musik erraten",
-  kategorie: "quiz",
-  modus: "einzeln",
+  id: 'musik-erraten',
+  mode: 'single',
+  category: 'quiz',
+  title: 'Musik erraten',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Songs oder Ausschnitte muessen moeglichst schnell erkannt werden.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Musikclips', 'Lautsprecher'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

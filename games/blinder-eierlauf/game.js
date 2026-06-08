@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "blinder-eierlauf",
-  name: "Blinder Eierlauf",
-  kategorie: "sport",
-  modus: "gemeinsam",
+  id: 'blinder-eierlauf',
+  mode: 'group',
+  category: 'sport',
+  title: 'Blinder Eierlauf',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Teamspiel mit Eierlauf und eingeschraenkter Sicht.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Loeffel', 'Eier oder Ersatz', 'Augenbinden'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

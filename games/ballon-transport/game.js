@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "ballon-transport",
-  name: "Ballon transportieren",
-  kategorie: "sport",
-  modus: "gemeinsam",
+  id: 'ballon-transport',
+  mode: 'group',
+  category: 'sport',
+  title: 'Ballon transportieren',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Teams transportieren einen Ballon nach vorgegebenen Regeln.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Ballons', 'Streckenmarkierung'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

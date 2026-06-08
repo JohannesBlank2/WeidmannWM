@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "dart-ringe",
-  name: "Dart Ringe",
-  kategorie: "sport",
-  modus: "einzeln",
+  id: 'dart-ringe',
+  mode: 'single',
+  category: 'sport',
+  title: 'Dart Ringe',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Zielspiel mit Ringen.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Dart Ringe'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };

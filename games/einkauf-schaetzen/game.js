@@ -9,11 +9,16 @@
  * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
-  id: "einkauf-schaetzen",
-  name: "Einkauf Werte schätzen",
-  kategorie: "geschicklichkeit",
-  modus: "einzeln",
+  id: 'einkauf-schaetzen',
+  mode: 'single',
+  category: 'skill',
+  title: 'Einkauf Werte schaetzen',
+  responsiblePerson: 'TBD',
+  difficulty: 1,
+  description: 'Preise oder Werte von Einkaufsartikeln muessen geschaetzt werden.',
+  rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
+  materials: ['Einkaufsartikel', 'Preisloesung'],
+  hasBeenPlayed: false,
   interaktionstyp: 'keine', // TBD beim Bauen
-  // schwierigkeit: 1-3 (TBD)
   built: false,
 };
