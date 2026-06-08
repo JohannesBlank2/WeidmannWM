@@ -5,8 +5,7 @@
  * Demo-Spiel (buzzer-test) als Platzhalter -> der Ablauf funktioniert komplett.
  *
  * FERTIGSTELLEN: built auf true setzen und in DIESEM Ordner display.js + play.js
- * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp/
- * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
+ * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
   id: 'video-hanni-richi',
@@ -14,7 +13,6 @@ module.exports = {
   category: 'quiz',
   title: 'Video (Hanni vs. Richi)',
   responsiblePerson: 'TBD',
-  difficulty: 1,
   description: 'Teams beantworten Fragen oder treffen Entscheidungen zu einem Video.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Video', 'Abspielgeraet'],

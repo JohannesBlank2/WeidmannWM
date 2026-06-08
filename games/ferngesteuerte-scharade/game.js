@@ -5,8 +5,7 @@
  * Demo-Spiel (buzzer-test) als Platzhalter -> der Ablauf funktioniert komplett.
  *
  * FERTIGSTELLEN: built auf true setzen und in DIESEM Ordner display.js + play.js
- * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp/
- * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
+ * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
   id: 'ferngesteuerte-scharade',
@@ -14,7 +13,6 @@ module.exports = {
   category: 'skill',
   title: 'Ferngesteuerte Scharade',
   responsiblePerson: 'TBD',
-  difficulty: 1,
   description: 'Ein Teammitglied wird angeleitet und stellt Begriffe dar.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Begriffskarten'],

@@ -64,7 +64,7 @@ Die Pick-Reihenfolge ist `1-2-3-4-4-3-2-1`. Der Ablauf pro Runde:
 2. Das auswaehlende Team waehlt eine Kategorie: `sport`, `skill`, `quiz`.
 3. Die Registry liefert bis zu drei ungespielte Spiele passend zu Modus und Kategorie.
 4. Das Team waehlt ein Spiel.
-5. Die Detailansicht zeigt Titel, Verantwortliche Person, Schwierigkeit, Beschreibung, Material und Regeln.
+5. Die Detailansicht zeigt Titel, Verantwortliche Person, Beschreibung, Material und Regeln.
 6. Der Startbutton startet das Spiel. Bei `single` kommt vorher die Spielerauswahl.
 7. Beim Beenden wird das Spiel als gespielt markiert und spaeter nicht mehr vorgeschlagen, solange ungespielte Alternativen verfuegbar sind.
 
@@ -93,7 +93,6 @@ module.exports = {
   category: 'sport', // 'sport' | 'skill' | 'quiz'
   title: 'Mein Spiel',
   responsiblePerson: 'Name',
-  difficulty: 2,
   description: 'Kurze Beschreibung.',
   rules: 'Regeln fuer die Runde.',
   materials: ['Material 1', 'Material 2'],

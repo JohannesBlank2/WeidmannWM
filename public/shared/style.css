@@ -80,9 +80,6 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .score-team.leader .rank { color: var(--accent); font-weight: 700; }
 .board-label { color: var(--muted); font-size: .9rem; margin-bottom: 8px; text-align: center; letter-spacing: .04em; text-transform: uppercase; }
 
-/* ---- Sterne (Schwierigkeit) ---- */
-.stars { color: var(--accent); letter-spacing: 2px; }
-
 .game-fallback {
   padding: 30px;
   text-align: center;

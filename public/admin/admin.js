@@ -205,7 +205,7 @@
       <div class="game-item">
         <div class="info">
           <div class="nm">${esc(g.title || g.name)}</div>
-          <div class="mt">${categoryLabel(g.category)} &middot; ${(g.mode || []).map(modeLabel).join('/')} &middot; <span class="stars">${stars(g.difficulty || g.schwierigkeit)}</span> &middot; ${g.interaktionstyp}</div>
+          <div class="mt">${categoryLabel(g.category)} &middot; ${(g.mode || []).map(modeLabel).join('/')} &middot; ${g.interaktionstyp}</div>
         </div>
         <button class="${activeId === g.id ? 'good' : 'primary'}" data-start="${g.id}">
           ${activeId === g.id ? 'laeuft' : 'Starten'}
@@ -264,7 +264,7 @@
       <div class="lbl">Gewaehlt:</div>
       <div class="game-detail">
         <h3>${esc(game.title || game.name)}</h3>
-        <div class="muted">${categoryLabel(game.category)} &middot; ${stars(game.difficulty || game.schwierigkeit)}${game.responsiblePerson ? ' &middot; ' + esc(game.responsiblePerson) : ''}</div>
+        <div class="muted">${categoryLabel(game.category)}${game.responsiblePerson ? ' &middot; ' + esc(game.responsiblePerson) : ''}</div>
         ${detailRow('Kurzbeschreibung', game.description)}
         ${detailRow('Material', (game.materials || []).join(', '))}
         ${detailRow('Regeln', game.rules)}
@@ -300,10 +300,6 @@
   function modeLabel(mode) { return mode === 'group' ? 'Gruppenspiel' : 'Einzelspiel'; }
   function categoryLabel(category) {
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
-  }
-  function stars(n) {
-    const value = Math.min(3, Math.max(1, Number(n) || 1));
-    return '*'.repeat(value) + '-'.repeat(3 - value);
   }
   function esc(s) {
     return String(s || '').replace(/[&<>"']/g, (c) =>

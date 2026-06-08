@@ -68,7 +68,7 @@
         contentEl.innerHTML = `
           <div class="game-head">
             <div class="title">${escapeHtml(g.title || g.name)}</div>
-            <div class="meta">${categoryLabel(g.category)} - ${stars(g.difficulty || g.schwierigkeit)} - ${g.interaktionstyp}</div>
+            <div class="meta">${categoryLabel(g.category)} - ${g.interaktionstyp}</div>
           </div>`;
       }
       return;
@@ -106,7 +106,7 @@
         .map((c) => `
         <div class="choice-card">
           <div class="cn">${escapeHtml(c.title || c.name)}</div>
-          <div class="cm">${stars(c.difficulty || c.schwierigkeit)} - ${c.responsiblePerson ? escapeHtml(c.responsiblePerson) : 'offen'}</div>
+          <div class="cm">${c.responsiblePerson ? escapeHtml(c.responsiblePerson) : 'offen'}</div>
         </div>`)
         .join('');
       contentEl.innerHTML = `
@@ -144,7 +144,7 @@
       <div class="choices-wrap">
         <div class="game-head">
           <div class="title">${escapeHtml(game.title || game.name)}</div>
-          <div class="meta">${categoryLabel(game.category)} - ${stars(game.difficulty || game.schwierigkeit)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</div>
+          <div class="meta">${categoryLabel(game.category)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</div>
         </div>
         <div class="choice-card" style="max-width:760px;margin:24px auto;text-align:left;">
           ${detailRow('Kurzbeschreibung', game.description)}
@@ -212,10 +212,6 @@
   function modeLabel(mode) { return mode === 'group' ? 'Gruppenspiel' : 'Einzelspiel'; }
   function categoryLabel(category) {
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
-  }
-  function stars(n) {
-    const value = Math.min(3, Math.max(1, Number(n) || 1));
-    return '*'.repeat(value) + '-'.repeat(3 - value);
   }
   function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, (c) =>

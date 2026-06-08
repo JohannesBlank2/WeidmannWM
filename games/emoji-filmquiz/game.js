@@ -6,7 +6,7 @@
  *
  * FERTIGSTELLEN: built auf true setzen und in DIESEM Ordner display.js + play.js
  * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp/
- * difficulty anpassen. Kein Eingriff in den Kern noetig.
+ * interaktionstyp anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
   id: 'emoji-filmquiz',
@@ -14,7 +14,6 @@ module.exports = {
   category: 'quiz',
   title: 'Emoji Filmquiz',
   responsiblePerson: 'TBD',
-  difficulty: 1,
   description: 'Mehrere Filmtitel werden nur durch Emojis dargestellt. Die Teams muessen erraten, welcher Film gemeint ist.',
   rules: 'Teams nennen oder buzzern den gesuchten Filmtitel. Die genaue Wertung wird beim Ausbau des Spiels festgelegt.',
   materials: ['Emoji-Filmraetsel', 'Loesungsliste'],

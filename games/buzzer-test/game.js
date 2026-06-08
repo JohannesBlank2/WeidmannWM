@@ -18,7 +18,6 @@ module.exports = {
   category: 'quiz',
   title: 'Buzzer-Test',
   responsiblePerson: 'System',
-  difficulty: 1,
   description: 'Demo- und Platzhalterspiel fuer noch nicht gebaute Spiele.',
   rules: 'Admin gibt den Buzzer frei. Das zuerst buzzernde Team wird erfasst.',
   materials: [],

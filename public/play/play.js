@@ -136,7 +136,7 @@
   function gameButton(game) {
     return `<button class="pick-btn" data-game="${game.gameId}">
       ${escapeHtml(game.title || game.name)}
-      <span class="sub">${categoryLabel(game.category)} - ${stars(game.difficulty || game.schwierigkeit)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</span>
+      <span class="sub">${categoryLabel(game.category)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</span>
     </button>`;
   }
 
@@ -145,7 +145,7 @@
     return `
       <div class="card">
         <h2>${escapeHtml(game.title || game.name)}</h2>
-        <div class="muted">${categoryLabel(game.category)} - ${stars(game.difficulty || game.schwierigkeit)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</div>
+        <div class="muted">${categoryLabel(game.category)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</div>
         ${detailRow('Kurzbeschreibung', game.description)}
         ${detailRow('Material', (game.materials || []).join(', '))}
         ${detailRow('Regeln', game.rules)}
@@ -253,10 +253,6 @@
   function modeLabel(mode) { return mode === 'group' ? 'Gruppenspiel' : 'Einzelspiel'; }
   function categoryLabel(category) {
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
-  }
-  function stars(n) {
-    const value = Math.min(3, Math.max(1, Number(n) || 1));
-    return '*'.repeat(value) + '-'.repeat(3 - value);
   }
   function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, (c) =>

@@ -5,8 +5,7 @@
  * Demo-Spiel (buzzer-test) als Platzhalter -> der Ablauf funktioniert komplett.
  *
  * FERTIGSTELLEN: built auf true setzen und in DIESEM Ordner display.js + play.js
- * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp/
- * schwierigkeit anpassen. Kein Eingriff in den Kern noetig.
+ * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp anpassen. Kein Eingriff in den Kern noetig.
  */
 module.exports = {
   id: 'wo-liegt-was',
@@ -14,7 +13,6 @@ module.exports = {
   category: 'quiz',
   title: 'Wo liegt was',
   responsiblePerson: 'TBD',
-  difficulty: 1,
   description: 'Orte oder Begriffe muessen auf einer Karte oder Skala eingeordnet werden.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Karte oder Anzeige', 'Loesungen'],

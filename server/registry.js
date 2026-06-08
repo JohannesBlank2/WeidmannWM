@@ -49,7 +49,6 @@ function normalizeCategory(value) {
  *     category:        'sport' | 'skill' | 'quiz',
  *     title,
  *     responsiblePerson,
- *     difficulty:      1 | 2 | 3,
  *     description,
  *     rules,
  *     materials:       string[],
@@ -105,7 +104,6 @@ class Registry {
     const interaktionstyp = INTERAKTIONEN.includes(def.interaktionstyp)
       ? def.interaktionstyp
       : 'keine';
-    const schwierigkeit = Math.min(3, Math.max(1, Number(def.difficulty || def.schwierigkeit) || 1));
     const modus = normalizeModus(def.mode || def.modus);
     // built default true; nur explizit built:false ist ein Platzhalter.
     const built = def.built !== false;
@@ -120,8 +118,6 @@ class Registry {
       category: kategorie,
       modus,
       mode: modus,
-      schwierigkeit,
-      difficulty: schwierigkeit,
       responsiblePerson: def.responsiblePerson || '',
       description: def.description || '',
       rules: def.rules || '',
@@ -153,8 +149,6 @@ class Registry {
       category: g.category,
       modus: g.modus,
       mode: g.mode,
-      schwierigkeit: g.schwierigkeit,
-      difficulty: g.difficulty,
       responsiblePerson: g.responsiblePerson,
       description: g.description,
       rules: g.rules,
@@ -179,8 +173,6 @@ class Registry {
       category: g.category,
       modus: g.modus,
       mode: g.mode,
-      schwierigkeit: g.schwierigkeit,
-      difficulty: g.difficulty,
       responsiblePerson: g.responsiblePerson,
       description: g.description,
       rules: g.rules,
@@ -224,8 +216,6 @@ class Registry {
         category: g.category,
         modus: g.modus,
         mode: g.mode,
-        schwierigkeit: g.schwierigkeit,
-        difficulty: g.difficulty,
         responsiblePerson: g.responsiblePerson,
         description: g.description,
         rules: g.rules,
