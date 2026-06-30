@@ -11,12 +11,13 @@ module.exports = {
   id: 'einkauf-schaetzen',
   mode: 'single',
   category: 'skill',
-  title: 'Einkauf Werte schaetzen',
+  title: 'How much is the fish',
   responsiblePerson: 'TBD',
-  description: 'Preise oder Werte von Einkaufsartikeln muessen geschaetzt werden.',
+  description: 'Preise oder Werte muessen moeglichst genau geschaetzt werden.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
-  materials: ['Einkaufsartikel', 'Preisloesung'],
+  materials: ['Schaetzobjekte', 'Preisloesung'],
   hasBeenPlayed: false,
+  selectable: true,
   interaktionstyp: 'keine', // TBD beim Bauen
   built: false,
 };

@@ -13,7 +13,7 @@ module.exports = {
   category: 'skill',
   title: 'Papierflieger',
   responsiblePerson: 'TBD',
-  description: 'Teams bauen und werfen Papierflieger.',
+  description: 'Spieler bauen und werfen Papierflieger.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Papier', 'Messband oder Zielmarkierung'],
   hasBeenPlayed: false,

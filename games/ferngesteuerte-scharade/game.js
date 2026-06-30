@@ -13,7 +13,7 @@ module.exports = {
   category: 'skill',
   title: 'Ferngesteuerte Scharade',
   responsiblePerson: 'TBD',
-  description: 'Ein Teammitglied wird angeleitet und stellt Begriffe dar.',
+  description: 'Ein Spieler wird angeleitet und stellt Begriffe dar.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Begriffskarten'],
   hasBeenPlayed: false,

@@ -11,12 +11,13 @@ module.exports = {
   id: 'schneid-in-die-haelfte',
   mode: 'single',
   category: 'skill',
-  title: 'Schneid in die Haelfte',
+  title: 'Halbe Sache',
   responsiblePerson: 'TBD',
   description: 'Ein Objekt oder eine Vorlage soll moeglichst genau halbiert werden.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Vorlage', 'Schneidewerkzeug'],
   hasBeenPlayed: false,
+  selectable: true,
   interaktionstyp: 'keine', // TBD beim Bauen
   built: false,
 };

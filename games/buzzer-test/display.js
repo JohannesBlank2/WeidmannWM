@@ -35,11 +35,11 @@ GameRegistry.register('buzzer-test', {
     statusEl.textContent = txt;
     statusEl.style.color = col;
 
-    const byId = Object.fromEntries(state.teams.map((t) => [t.id, t]));
+    const byId = Object.fromEntries(state.players.map((p) => [p.id, p]));
     orderEl.innerHTML = state.buzzer.presses
       .map((p) => {
-        const t = byId[p.teamId];
-        return `<div style="color:${t ? t.color : '#fff'}">${p.order}. ${t ? t.name : p.teamId}</div>`;
+        const player = byId[p.playerId];
+        return `<div style="color:${player ? player.color : '#fff'}">${p.order}. ${player ? player.name : p.playerId}</div>`;
       })
       .join('');
   },

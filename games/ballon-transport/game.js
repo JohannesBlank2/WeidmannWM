@@ -13,7 +13,7 @@ module.exports = {
   category: 'sport',
   title: 'Ballon transportieren',
   responsiblePerson: 'TBD',
-  description: 'Teams transportieren einen Ballon nach vorgegebenen Regeln.',
+  description: 'Spieler transportieren einen Ballon nach vorgegebenen Regeln.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Ballons', 'Streckenmarkierung'],
   hasBeenPlayed: false,

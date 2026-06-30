@@ -4,7 +4,7 @@ const os = require('os');
 
 /**
  * Liefert die erste nicht-interne IPv4-Adresse (das WLAN/LAN-Interface),
- * damit iPads & Handys den Server im lokalen Netz erreichen.
+ * damit Handys, TV und Admin-Geraet den Server im lokalen Netz erreichen.
  * Faellt auf 127.0.0.1 zurueck, falls nichts gefunden wird.
  */
 function getLocalIp() {

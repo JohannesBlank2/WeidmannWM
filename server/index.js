@@ -60,7 +60,7 @@ app.get('/', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
-  // Socket.IO macht automatischen Reconnect; grosszuegige Timeouts fuer iPad-Standby.
+  // Socket.IO macht automatischen Reconnect; grosszuegige Timeouts fuer Handy-Standby.
   pingTimeout: 30000,
   pingInterval: 10000,
 });
@@ -88,13 +88,13 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log('--------------------------------------------------------');
   console.log(`   Startseite : ${urls.start}`);
   console.log(`   DISPLAY/TV : ${urls.display}`);
-  console.log(`   SPIELER    : ${urls.play}      (iPads)`);
-  console.log(`   ADMIN      : ${urls.admin}     (Steuerung)`);
+    console.log(`   HANDYS     : ${urls.play}      (Spieler)`);
+    console.log(`   ADMIN      : ${urls.admin}     (Steuerung)`);
   console.log('--------------------------------------------------------');
 
-  // QR-Codes direkt im Terminal (zum Abscannen mit iPad/Handy).
+  // QR-Codes direkt im Terminal (zum Abscannen mit Handy oder Admin-Geraet).
   try {
-    console.log('\n   QR  ->  SPIELER  (' + urls.play + ')\n');
+    console.log('\n   QR  ->  HANDY-SPIELER  (' + urls.play + ')\n');
     console.log(await QRCode.toString(urls.play, { type: 'terminal', small: true }));
     console.log('\n   QR  ->  ADMIN    (' + urls.admin + ')\n');
     console.log(await QRCode.toString(urls.admin, { type: 'terminal', small: true }));

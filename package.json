@@ -1,7 +1,7 @@
 {
   "name": "weidmann-wm",
   "version": "1.0.0",
-  "description": "Lokale Spieleshow-App fuer 4 Teams (Quiz, Sport, Geschicklichkeit, Gruppenspiele)",
+  "description": "Lokale Spieleshow-App fuer 5 Einzelspieler mit Kategorie-Spin",
   "main": "server/index.js",
   "type": "commonjs",
   "scripts": {

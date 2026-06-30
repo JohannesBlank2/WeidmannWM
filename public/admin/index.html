@@ -22,10 +22,10 @@
     .phase-pill { padding: 4px 12px; border-radius: 999px; background: var(--panel);
       border: 1px solid var(--line); text-transform: capitalize; font-size: .9rem; }
 
-    /* Teams */
-    .team-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-    .team-row .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
-    .team-row input[type=text] {
+    /* Spieler */
+    .player-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .player-row .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
+    .player-row input[type=text] {
       flex: 1; min-width: 90px; background: var(--panel); border: 1px solid var(--line);
       color: var(--text); border-radius: 8px; padding: 8px; font: inherit;
     }
@@ -42,6 +42,8 @@
     .game-item .info .nm { font-weight: 700; }
     .game-item .info .mt { color: var(--muted); font-size: .85rem; }
     .bigbtn { flex: 1; padding: 16px; font-size: 1.05rem; font-weight: 700; }
+    .spin-admin-list { display: grid; gap: 8px; margin-top: 8px; }
+    .game-detail.mini { padding: 10px 12px; }
   </style>
 </head>
 <body>
@@ -62,7 +64,6 @@
       <button data-flow="open-kategorie">📂 Kategorie-Auswahl öffnen</button>
       <button class="bad" data-flow="stop-game">⏹ Spiel beenden → Auswertung</button>
       <button class="primary" data-flow="next-round">⏭ Nächste Runde</button>
-      <button data-flow="goto-bonus">→ Bonus</button>
       <button data-flow="goto-finale">→ Finale</button>
     </div>
     <div class="pickrow" id="picker-area"></div>
@@ -79,13 +80,13 @@
     <div id="buzz-order" class="muted" style="margin-top:10px;"></div>
   </section>
 
-  <!-- Teams + Punkte -->
+  <!-- Spieler + Punkte -->
   <section class="card">
-    <h2>Teams · Punkte</h2>
+    <h2>Spieler · Coins</h2>
     <div class="muted" style="font-size:.82rem; margin-bottom:6px;">
-      <b>Gesamt</b> = persistente Wertung (+1/-1) · <b>Spiel</b> = nur dieses Spiel (getrennt)
+      <b>Coins</b> = Gesamtstand (+1/-1) · <b>Spiel</b> = Platzpunkte fuer die laufende Auswertung
     </div>
-    <div id="teams"></div>
+    <div id="players"></div>
     <div class="row" style="margin-top:10px;">
       <button data-flow="reset-game-points">🔄 Spielpunkte auf 0</button>
     </div>
@@ -107,7 +108,7 @@
   <!-- Gefahrenzone -->
   <section class="card">
     <h2>Zuruecksetzen</h2>
-    <button class="bad" id="reset-all">⚠️ Alles zuruecksetzen (Punkte & Ablauf)</button>
+    <button class="bad" id="reset-all">⚠️ Alles zuruecksetzen (Coins & Ablauf)</button>
   </section>
 
   <script src="/socket.io/socket.io.js"></script>

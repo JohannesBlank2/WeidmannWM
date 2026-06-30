@@ -13,7 +13,7 @@ module.exports = {
   category: 'quiz',
   title: 'Video (Hanni vs. Richi)',
   responsiblePerson: 'TBD',
-  description: 'Teams beantworten Fragen oder treffen Entscheidungen zu einem Video.',
+  description: 'Spieler beantworten Fragen oder treffen Entscheidungen zu einem Video.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Video', 'Abspielgeraet'],
   hasBeenPlayed: false,

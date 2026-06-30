@@ -13,7 +13,7 @@ module.exports = {
   category: 'skill',
   title: 'Labyrinth',
   responsiblePerson: 'TBD',
-  description: 'Teams steuern gemeinsam ein Objekt durch ein Labyrinth.',
+  description: 'Spieler steuern ein Objekt durch ein Labyrinth.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Labyrinth', 'Kugel oder Spielfigur'],
   hasBeenPlayed: false,

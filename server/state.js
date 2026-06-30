@@ -4,111 +4,108 @@ const fs = require('fs');
 const path = require('path');
 
 const STATE_FILE = path.join(__dirname, '..', 'state.json');
+const STATE_SCHEMA_VERSION = 3;
 
-// Phasen der Show-Statemaschine (Reihenfolge = grober Ablauf).
-//   lobby            -> Teams treten bei
-//   runden-uebersicht-> Runde X angekuendigt (Modus + auswaehlendes Team)
-//   kategorie-auswahl-> auswaehlendes Team waehlt Kategorie
-//   spiel-auswahl    -> ungespielte Spiele der Kategorie werden gezeigt, Team waehlt
-//   spiel-details    -> gewaehltes Spiel wird mit Details gezeigt, Startbutton
-//   spielerauswahl   -> NUR bei single: jedes Team waehlt seinen Spieler
-//   spiel-aktiv      -> Spiel laeuft (Spielpunkte + Buzzer)
-//   auswertung       -> Spielpunkte stehen, Admin vergibt Gesamtpunkte
-//   bonus / finale   -> Sonderphasen (hier nur als Phase vorgesehen)
+// Phasen der Show-Statemaschine.
+//   lobby              -> Spieler verbinden sich
+//   runden-uebersicht  -> Runde X wird angekuendigt
+//   kategorie-auswahl  -> aktueller Spieler waehlt Sport/Skill/Quiz
+//   spin-bereit        -> drei geloste Spiele stehen bereit, Spieler darf spinnen
+//   spin-laeuft        -> TV zeigt den Gluecksrad-/Slot-Spin
+//   spiel-details      -> ausgelostes Spiel wird angezeigt
+//   wetten             -> Spieler setzen geheim 0..50 Coins auf einen Mitspieler
+//   spiel-aktiv        -> Spiel laeuft
+//   auswertung         -> Admin setzt Platzierungen und wendet Auszahlung an
+//   finale             -> Show ist durch
 const PHASES = [
   'lobby',
   'runden-uebersicht',
   'kategorie-auswahl',
-  'spiel-auswahl',
+  'spin-bereit',
+  'spin-laeuft',
   'spiel-details',
-  'spielerauswahl',
+  'wetten',
   'spiel-aktiv',
   'auswertung',
-  'bonus',
   'finale',
 ];
 
-// Buzzer-Status: locked = gesperrt, armed = freigegeben/scharf, resolved = aufgeloest.
 const BUZZER = { LOCKED: 'locked', ARMED: 'armed', RESOLVED: 'resolved' };
 
-const TEAM_COLORS = ['#e63946', '#2a9d8f', '#f4a261', '#4361ee'];
-
-// Max. Anzahl Einzelspiele pro Spieler (4 Einzelrunden / 2 Spieler = je 2).
-const MAX_EINZEL_PRO_SPIELER = 2;
-
-// Runden-Plan: 8 Spiele. Modus wechselt (single/group, Start single),
-// Pick-Reihenfolge ist eine "Snake" 1-2-3-4-4-3-2-1.
-// picker = 1-basierte Teamposition (Team 1..4).
-const ROUND_PLAN = [
-  { mode: 'single', picker: 1 },
-  { mode: 'group', picker: 2 },
-  { mode: 'single', picker: 3 },
-  { mode: 'group', picker: 4 },
-  { mode: 'single', picker: 4 },
-  { mode: 'group', picker: 3 },
-  { mode: 'single', picker: 2 },
-  { mode: 'group', picker: 1 },
-];
-const TOTAL_ROUNDS = ROUND_PLAN.length;
+const PLAYER_COLORS = ['#e63946', '#2a9d8f', '#f4a261', '#4361ee', '#9b5de5'];
+const PLAYER_COUNT = 5;
+const TOTAL_ROUNDS = 5;
+const SPIN_DURATION_MS = 4600;
+const STARTING_COINS = 50;
+const MAX_BET = 50;
+const RANK_AWARDS = {
+  1: 50,
+  2: 40,
+  3: 30,
+  4: 20,
+  5: 10,
+};
 
 function defaultPlayers() {
-  return [
-    { name: 'Spieler 1', einzelCount: 0 },
-    { name: 'Spieler 2', einzelCount: 0 },
-  ];
+  return Array.from({ length: PLAYER_COUNT }, (_, i) => ({
+    id: `player${i + 1}`,
+    name: `Spieler ${i + 1}`,
+    score: STARTING_COINS,
+    gameScore: 0,
+    color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+  }));
 }
 
-function defaultTeams() {
-  return [1, 2, 3, 4].map((n) => ({
-    id: `team${n}`,
-    name: `Team ${n}`,
-    score: 0, // Gesamtpunktzahl (persistent)
-    gameScore: 0, // Spielpunkte (nur fuer das aktuelle Spiel, getrennt)
-    color: TEAM_COLORS[n - 1],
-    players: defaultPlayers(), // 2 Spieler je Team (mit Einzelspiel-Zaehler)
-  }));
+function defaultSpin() {
+  return {
+    status: 'idle',
+    startedAt: null,
+    durationMs: SPIN_DURATION_MS,
+    winnerGameId: null,
+    winnerIndex: null,
+    sequence: [],
+  };
 }
 
 function defaultRound() {
   return {
-    number: 0, // 1..8, 0 = Show noch nicht gestartet
-    index: -1, // 0-basierter Index in ROUND_PLAN
+    number: 0,
+    index: -1,
     total: TOTAL_ROUNDS,
-    mode: null, // 'single' | 'group'
-    modus: null, // Kompatibilitaet: 'einzeln' | 'gemeinsam'
-    pickerTeamId: null, // welches Team gerade auswaehlt
-    category: null, // 'sport' | 'skill' | 'quiz'
-    kategorie: null, // Kompatibilitaet: 'sport' | 'quiz' | 'geschicklichkeit'
+    pickerPlayerId: null,
+    category: null,
+    kategorie: null,
     availableCategories: [],
-    availableKategorien: [], // Kategorien mit noch ungespielten Spielen (Modus)
-    choices: [], // zur Auswahl stehende (ungespielte) Spiele
-    gameId: null, // gewaehltes Spiel (vor/waehrend Spielerauswahl)
-    selectedGame: null, // vollstaendige Details aus den Choices
-    selectedPlayers: {}, // { teamId: playerIndex } bei Einzelspielen
+    availableKategorien: [],
+    choices: [],
+    gameId: null,
+    selectedGame: null,
+    spin: defaultSpin(),
+    // bets: { [playerId]: { playerId, targetPlayerId, amount, submittedAt } }
+    bets: {},
+    // placements: { [playerId]: 1..5 }
+    placements: {},
+    payoutApplied: false,
+    payoutSummary: [],
   };
 }
 
 function defaultState() {
   return {
+    schemaVersion: STATE_SCHEMA_VERSION,
     phase: 'lobby',
-    teams: defaultTeams(),
-    // clients: { [clientId]: { teamId, role, connected, lastSeen } }
-    // Persistiert, damit Reconnect (iPad aus Standby) Team & Rolle behaelt.
+    players: defaultPlayers(),
+    // clients: { [clientId]: { playerId, role, connected, lastSeen } }
     clients: {},
     buzzer: {
       status: BUZZER.LOCKED,
-      // presses: [{ teamId, clientId, ts, order }] -> Reihenfolge der Buzzes
+      // presses: [{ playerId, clientId, ts, order }]
       presses: [],
     },
-    // Runden-/Pick-Ablauf.
     round: defaultRound(),
-    // Verbrauchte Spiele (id-Liste) -> tauchen in spaeteren Auswahlen nicht mehr auf.
     consumedGames: [],
-    // Aktuell laufendes Spiel (aus der Registry); null = kein Spiel aktiv.
     activeGame: null,
-    // Frei nutzbarer Zustand des aktiven Spiel-Moduls.
     gameState: {},
-    // Reserviert fuer spaetere Mechaniken (Spielhistorie ...).
     meta: {
       history: [],
     },
@@ -118,17 +115,16 @@ function defaultState() {
 class GameState {
   constructor() {
     this.state = defaultState();
-    this.registry = null; // wird per setRegistry injiziert (fuer Spielauswahl)
+    this.registry = null;
     this._saveTimer = null;
+    this._spinTimer = null;
     this._onChange = null;
   }
 
-  /** Registry injizieren, damit der Pick-Ablauf Spiele zusammenstellen kann. */
   setRegistry(registry) {
     this.registry = registry;
   }
 
-  /** Callback, der nach jeder Aenderung gefeuert wird (z.B. Broadcast). */
   setOnChange(fn) {
     this._onChange = fn;
   }
@@ -137,10 +133,6 @@ class GameState {
     return this.state;
   }
 
-  /**
-   * Laedt persistierten State von der Platte (Crash-Schutz).
-   * Merged auf den Default, damit neue Felder nach Updates nicht fehlen.
-   */
   load() {
     try {
       if (!fs.existsSync(STATE_FILE)) return;
@@ -148,32 +140,33 @@ class GameState {
       const saved = JSON.parse(raw);
       const base = defaultState();
 
-      const teams =
-        Array.isArray(saved.teams) && saved.teams.length ? saved.teams : base.teams;
+      if (saved.schemaVersion !== STATE_SCHEMA_VERSION || !Array.isArray(saved.players)) {
+        this.state = base;
+        this.state.clients = normalizeClients(saved.clients, this.state.players);
+        console.log('[state] Alter Team-State erkannt, starte mit neuem Einzelspieler-State.');
+        return;
+      }
 
       this.state = {
         ...base,
         ...saved,
-        // Teams normalisieren: neue Felder (gameScore, players) sicherstellen.
-        teams: teams.map((t, i) => ({
-          id: t.id || `team${i + 1}`,
-          name: t.name || `Team ${i + 1}`,
-          score: Number(t.score) || 0,
-          gameScore: Number(t.gameScore) || 0,
-          color: t.color || TEAM_COLORS[i % TEAM_COLORS.length],
-          players: normalizePlayers(t.players),
-        })),
-        buzzer: { ...base.buzzer, ...(saved.buzzer || {}) },
-        round: normalizeRound({ ...base.round, ...(saved.round || {}) }),
+        schemaVersion: STATE_SCHEMA_VERSION,
+        players: normalizePlayers(saved.players),
+        clients: normalizeClients(saved.clients, normalizePlayers(saved.players)),
+        buzzer: normalizeBuzzer(saved.buzzer),
+        round: normalizeRound(saved.round),
         consumedGames: Array.isArray(saved.consumedGames) ? saved.consumedGames : [],
         meta: { ...base.meta, ...(saved.meta || {}) },
-        clients: saved.clients || {},
       };
 
-      // Beim Start sind noch keine Sockets verbunden -> alle als getrennt markieren.
       for (const id of Object.keys(this.state.clients)) {
         this.state.clients[id].connected = false;
       }
+
+      if (this.state.phase === 'spin-laeuft') {
+        this._restoreSpinAfterLoad();
+      }
+
       console.log('[state] state.json geladen.');
     } catch (err) {
       console.error('[state] Konnte state.json nicht laden, nutze Default:', err.message);
@@ -181,7 +174,19 @@ class GameState {
     }
   }
 
-  /** Markiert State als geaendert: Broadcast + (debounced) Persistenz. */
+  _restoreSpinAfterLoad() {
+    const spin = this.state.round.spin || defaultSpin();
+    if (!spin.winnerGameId) {
+      this.state.phase = 'spin-bereit';
+      this.state.round.spin = defaultSpin();
+      return;
+    }
+
+    const elapsed = Date.now() - Number(spin.startedAt || 0);
+    const remaining = Math.max(0, Number(spin.durationMs || SPIN_DURATION_MS) - elapsed);
+    this._scheduleSpinFinish(remaining);
+  }
+
   touch() {
     if (this._onChange) this._onChange(this.state);
     this._scheduleSave();
@@ -195,7 +200,6 @@ class GameState {
     }, 400);
   }
 
-  /** Schreibt sofort & atomar (tmp + rename), damit state.json nie halb ist. */
   saveNow() {
     try {
       const tmp = `${STATE_FILE}.tmp`;
@@ -206,82 +210,177 @@ class GameState {
     }
   }
 
-  // ---- Phasen ---------------------------------------------------------------
-
   setPhase(phase) {
     if (!PHASES.includes(phase)) return;
     this.state.phase = phase;
     this.touch();
   }
 
-  // ---- Teams, Spieler & Gesamtpunkte ----------------------------------------
+  // ---- Spieler & Punkte ----------------------------------------------------
 
-  _team(teamId) {
-    return this.state.teams.find((t) => t.id === teamId) || null;
+  _player(playerId) {
+    return this.state.players.find((p) => p.id === playerId) || null;
   }
 
-  renameTeam(teamId, name) {
-    const team = this._team(teamId);
-    if (!team || !name) return;
-    team.name = String(name).slice(0, 40);
+  renamePlayer(playerId, name) {
+    const player = this._player(playerId);
+    if (!player || !name) return;
+    player.name = String(name).slice(0, 40);
     this.touch();
   }
 
-  renamePlayer(teamId, playerIndex, name) {
-    const team = this._team(teamId);
-    const i = Number(playerIndex);
-    if (!team || !team.players[i] || !name) return;
-    team.players[i].name = String(name).slice(0, 40);
+  addPoints(playerId, delta) {
+    const player = this._player(playerId);
+    if (!player) return;
+    player.score += Number(delta) || 0;
     this.touch();
   }
 
-  addPoints(teamId, delta) {
-    const team = this._team(teamId);
-    if (!team) return;
-    team.score += Number(delta) || 0;
+  setPoints(playerId, value) {
+    const player = this._player(playerId);
+    if (!player) return;
+    player.score = Number(value) || 0;
     this.touch();
   }
 
-  setPoints(teamId, value) {
-    const team = this._team(teamId);
-    if (!team) return;
-    team.score = Number(value) || 0;
+  addGamePoints(playerId, delta) {
+    const player = this._player(playerId);
+    if (!player) return;
+    player.gameScore += Number(delta) || 0;
     this.touch();
   }
 
-  // ---- Spielpunkte (getrennt von der Gesamtpunktzahl) -----------------------
-
-  addGamePoints(teamId, delta) {
-    const team = this._team(teamId);
-    if (!team) return;
-    team.gameScore += Number(delta) || 0;
-    this.touch();
-  }
-
-  setGamePoints(teamId, value) {
-    const team = this._team(teamId);
-    if (!team) return;
-    team.gameScore = Number(value) || 0;
+  setGamePoints(playerId, value) {
+    const player = this._player(playerId);
+    if (!player) return;
+    player.gameScore = Number(value) || 0;
     this.touch();
   }
 
   resetGameScores() {
-    this.state.teams.forEach((t) => {
-      t.gameScore = 0;
+    this.state.players.forEach((p) => {
+      p.gameScore = 0;
     });
     this.touch();
   }
 
-  // ---- Clients / Reconnect --------------------------------------------------
+  setBet(playerId, targetPlayerId, amount) {
+    if (this.state.phase !== 'wetten') return false;
+    const player = this._player(playerId);
+    if (!player) return false;
+
+    const parsedAmount = clampInt(amount, 0, Math.min(MAX_BET, Math.max(0, player.score)));
+    const target = targetPlayerId ? this._player(targetPlayerId) : null;
+    if (parsedAmount > 0 && (!target || target.id === player.id)) return false;
+
+    this.state.round.bets[player.id] = {
+      playerId: player.id,
+      targetPlayerId: parsedAmount > 0 ? target.id : null,
+      amount: parsedAmount,
+      submittedAt: Date.now(),
+    };
+    this.touch();
+    return true;
+  }
+
+  setPlacement(playerId, place) {
+    if (this.state.phase !== 'auswertung') return false;
+    const player = this._player(playerId);
+    const parsedPlace = Number(place);
+    if (!player || !Number.isInteger(parsedPlace) || parsedPlace < 1 || parsedPlace > PLAYER_COUNT) {
+      return false;
+    }
+
+    for (const id of Object.keys(this.state.round.placements)) {
+      if (this.state.round.placements[id] === parsedPlace) {
+        delete this.state.round.placements[id];
+        const replaced = this._player(id);
+        if (replaced) replaced.gameScore = 0;
+      }
+    }
+
+    this.state.round.placements[player.id] = parsedPlace;
+    player.gameScore = RANK_AWARDS[parsedPlace] || 0;
+    this.touch();
+    return true;
+  }
+
+  clearPlacement(playerId) {
+    if (this.state.phase !== 'auswertung') return false;
+    const player = this._player(playerId);
+    if (!player) return false;
+    delete this.state.round.placements[player.id];
+    player.gameScore = 0;
+    this.touch();
+    return true;
+  }
+
+  applyPayouts() {
+    if (this.state.phase !== 'auswertung') return false;
+    if (this.state.round.payoutApplied) return false;
+    if (!this._placementsComplete()) return false;
+
+    const winnerId = Object.entries(this.state.round.placements)
+      .find(([, place]) => place === 1)?.[0];
+    if (!winnerId) return false;
+
+    const byId = Object.fromEntries(this.state.players.map((p) => [p.id, p]));
+    const summary = this.state.players.map((player) => {
+      const place = this.state.round.placements[player.id];
+      const award = RANK_AWARDS[place] || 0;
+      const bet = this.state.round.bets[player.id] || {
+        playerId: player.id,
+        targetPlayerId: null,
+        amount: 0,
+      };
+      const betWon = bet.amount > 0 && bet.targetPlayerId === winnerId;
+      const betDelta = bet.amount > 0 ? (betWon ? bet.amount : -bet.amount) : 0;
+      const totalDelta = award + betDelta;
+
+      player.score += totalDelta;
+
+      return {
+        playerId: player.id,
+        playerName: player.name,
+        place,
+        award,
+        betTargetPlayerId: bet.targetPlayerId,
+        betTargetName: bet.targetPlayerId && byId[bet.targetPlayerId]
+          ? byId[bet.targetPlayerId].name
+          : null,
+        betAmount: bet.amount || 0,
+        betWon,
+        betDelta,
+        totalDelta,
+        finalScore: player.score,
+      };
+    });
+
+    this.state.round.payoutApplied = true;
+    this.state.round.payoutSummary = summary;
+    this.touch();
+    return true;
+  }
+
+  _placementsComplete() {
+    const places = Object.values(this.state.round.placements);
+    if (places.length !== this.state.players.length) return false;
+    return [1, 2, 3, 4, 5].every((place) => places.includes(place));
+  }
+
+  // ---- Clients / Reconnect -------------------------------------------------
 
   upsertClient(clientId, patch) {
     const existing = this.state.clients[clientId] || {
-      teamId: null,
+      playerId: null,
       role: 'play',
       connected: false,
       lastSeen: 0,
     };
-    this.state.clients[clientId] = { ...existing, ...patch, lastSeen: Date.now() };
+    this.state.clients[clientId] = normalizeClient(
+      { ...existing, ...patch, lastSeen: Date.now() },
+      this.state.players
+    );
     this.touch();
     return this.state.clients[clientId];
   }
@@ -294,20 +393,20 @@ class GameState {
     this.touch();
   }
 
-  joinTeam(clientId, teamId) {
+  joinPlayer(clientId, playerId) {
     const c = this.state.clients[clientId];
     if (!c) return;
-    if (!this.state.teams.some((t) => t.id === teamId)) return;
-    c.teamId = teamId;
+    if (!this.state.players.some((p) => p.id === playerId)) return;
+    c.playerId = playerId;
     this.touch();
   }
 
-  teamOfClient(clientId) {
+  playerOfClient(clientId) {
     const c = this.state.clients[clientId];
-    return c ? c.teamId : null;
+    return c ? c.playerId : null;
   }
 
-  // ---- Buzzer ---------------------------------------------------------------
+  // ---- Buzzer --------------------------------------------------------------
 
   armBuzzer() {
     this.state.buzzer.status = BUZZER.ARMED;
@@ -326,22 +425,17 @@ class GameState {
     this.touch();
   }
 
-  /**
-   * Verarbeitet einen Buzz. Server-Timestamp = Wahrheit (fair, kein Client-Cheat).
-   * Pro Team zaehlt nur der erste Buzz. Gibt das Press-Objekt zurueck oder null.
-   */
   registerBuzz(clientId) {
     const buzzer = this.state.buzzer;
     if (buzzer.status !== BUZZER.ARMED) return null;
 
     const client = this.state.clients[clientId];
-    if (!client || !client.teamId) return null;
+    if (!client || !client.playerId) return null;
 
-    // Team schon dabei? Dann ignorieren (erster Buzz zaehlt).
-    if (buzzer.presses.some((p) => p.teamId === client.teamId)) return null;
+    if (buzzer.presses.some((p) => p.playerId === client.playerId)) return null;
 
     const press = {
-      teamId: client.teamId,
+      playerId: client.playerId,
       clientId,
       ts: Date.now(),
       order: buzzer.presses.length + 1,
@@ -351,151 +445,139 @@ class GameState {
     return press;
   }
 
-  // ---- Runden- & Pick-Ablauf ------------------------------------------------
+  // ---- Runden- & Spin-Ablauf ----------------------------------------------
 
-  /** Setzt die Runden-Felder gemaess ROUND_PLAN fuer einen 0-basierten Index. */
   _applyRound(index) {
-    const plan = ROUND_PLAN[index];
-    if (!plan) return;
-    const pickerTeam = this.state.teams[plan.picker - 1];
-    const mode = plan.mode || germanToMode(plan.modus);
+    const picker = this.state.players[index % this.state.players.length];
+    this._clearSpinTimer();
     this.state.round = {
       ...defaultRound(),
       number: index + 1,
       index,
-      mode,
-      modus: modeToGerman(mode),
-      pickerTeamId: pickerTeam ? pickerTeam.id : null,
+      pickerPlayerId: picker ? picker.id : null,
     };
   }
 
-  /** Startet die Show: Runde 1, Phase "runden-uebersicht". */
   startShow() {
     this.state.consumedGames = [];
+    this.state.players.forEach((p) => {
+      p.score = STARTING_COINS;
+      p.gameScore = 0;
+    });
     this._applyRound(0);
-    this.clearActiveGame();
+    this.clearActiveGame(false);
+    this.state.buzzer = { status: BUZZER.LOCKED, presses: [] };
     this.state.phase = 'runden-uebersicht';
     this.touch();
   }
 
-  /** Zur Kategorie-Auswahl: verfuegbare Kategorien (Modus) ermitteln. */
   openKategorieAuswahl() {
     if (this.state.round.number < 1) this._applyRound(0);
-    this.state.round.kategorie = null;
+    this._clearSpinTimer();
     this.state.round.category = null;
+    this.state.round.kategorie = null;
     this.state.round.choices = [];
     this.state.round.gameId = null;
     this.state.round.selectedGame = null;
-    this.state.round.selectedPlayers = {};
+    this.state.round.spin = defaultSpin();
+    this.state.round.bets = {};
+    this.state.round.placements = {};
+    this.state.round.payoutApplied = false;
+    this.state.round.payoutSummary = [];
     this.state.round.availableCategories = this.registry
-      ? this.registry.availableKategorien(this.state.round.mode, this.state.consumedGames)
+      ? this.registry.availableCategories(this.state.consumedGames)
       : [];
-    this.state.round.availableKategorien = this.state.round.availableCategories.map(categoryToGerman);
+    this.state.round.availableKategorien =
+      this.state.round.availableCategories.map(categoryToGerman);
     this.state.phase = 'kategorie-auswahl';
     this.touch();
   }
 
-  /**
-   * Eine Kategorie wurde gewaehlt -> ungespielte Spiele zusammenstellen.
-   * teamId = waehlendes Team (Validierung), force = Admin-Override.
-   */
-  chooseKategorie(teamId, kategorie, force = false) {
+  chooseKategorie(playerId, kategorie, force = false) {
     if (this.state.phase !== 'kategorie-auswahl') return false;
-    if (!force && teamId !== this.state.round.pickerTeamId) return false;
+    if (!force && playerId !== this.state.round.pickerPlayerId) return false;
     if (!this.registry) return false;
+
     const category = normalizeCategory(kategorie);
     if (!this.state.round.availableCategories.includes(category)) return false;
 
-    const choices = this.registry.buildChoices(
-      this.state.round.mode,
-      category,
-      this.state.consumedGames
-    );
+    const choices = this.registry.buildSpinChoices(category, this.state.consumedGames);
+    if (!choices.length) return false;
 
     this.state.round.category = category;
     this.state.round.kategorie = categoryToGerman(category);
     this.state.round.choices = choices;
     this.state.round.gameId = null;
     this.state.round.selectedGame = null;
-    this.state.phase = 'spiel-auswahl';
+    this.state.round.spin = defaultSpin();
+    this.state.round.bets = {};
+    this.state.round.placements = {};
+    this.state.round.payoutApplied = false;
+    this.state.round.payoutSummary = [];
+    this.state.phase = 'spin-bereit';
     this.touch();
     return true;
   }
 
-  /**
-   * Ein Spiel aus den Choices wurde gewaehlt. Es startet noch nicht sofort,
-   * sondern wird zuerst in der Detailansicht bestaetigt.
-   */
-  chooseSpiel(teamId, gameId, force = false) {
-    if (this.state.phase !== 'spiel-auswahl') return false;
-    if (!force && teamId !== this.state.round.pickerTeamId) return false;
-    const choice = this.state.round.choices.find((c) => c.gameId === gameId);
+  startSpin(playerId, force = false) {
+    if (this.state.phase !== 'spin-bereit') return false;
+    if (!force && playerId !== this.state.round.pickerPlayerId) return false;
+
+    const choices = this.state.round.choices || [];
+    const selectableChoices = choices.filter((choice) => choice.selectable === true);
+    if (!selectableChoices.length) return false;
+
+    const winner = selectableChoices[Math.floor(Math.random() * selectableChoices.length)];
+    const winnerIndex = choices.findIndex((choice) => choice.gameId === winner.gameId);
+
+    this.state.round.spin = {
+      status: 'spinning',
+      startedAt: Date.now(),
+      durationMs: SPIN_DURATION_MS,
+      winnerGameId: winner.gameId,
+      winnerIndex,
+      sequence: buildSpinSequence(choices, winnerIndex),
+    };
+    this.state.phase = 'spin-laeuft';
+    this.touch();
+    this._scheduleSpinFinish(SPIN_DURATION_MS);
+    return true;
+  }
+
+  finishSpin() {
+    if (this.state.phase !== 'spin-laeuft') return false;
+    const spin = this.state.round.spin || defaultSpin();
+    const choice = this.state.round.choices.find((c) => c.gameId === spin.winnerGameId);
     if (!choice) return false;
 
-    this.state.round.gameId = gameId;
+    this._clearSpinTimer();
+    this.state.round.gameId = choice.gameId;
     this.state.round.selectedGame = choice;
-    this.state.phase = 'spiel-details';
+    this.state.round.spin = {
+      ...spin,
+      status: 'done',
+    };
+    this.state.round.bets = {};
+    this.state.round.placements = {};
+    this.state.round.payoutApplied = false;
+    this.state.round.payoutSummary = [];
+    this.state.phase = 'wetten';
     this.touch();
     return true;
   }
 
-  /** Zurueck zur Kategorie-Auswahl, z.B. wenn die Vorschlaege nicht passen. */
-  backToKategorieAuswahl(teamId, force = false) {
-    if (!['spiel-auswahl', 'spiel-details'].includes(this.state.phase)) return false;
-    if (!force && teamId !== this.state.round.pickerTeamId) return false;
+  backToKategorieAuswahl(playerId, force = false) {
+    if (!['spin-bereit', 'spiel-details', 'wetten'].includes(this.state.phase)) return false;
+    if (!force && playerId !== this.state.round.pickerPlayerId) return false;
     this.openKategorieAuswahl();
     return true;
   }
 
-  /**
-   * Startbutton nach der Detailansicht.
-   *  - single -> zuerst Spielerwahl
-   *  - group  -> Spiel startet direkt
-   */
-  startPickedGame(teamId, force = false) {
-    if (this.state.phase !== 'spiel-details') return false;
-    if (!force && teamId !== this.state.round.pickerTeamId) return false;
+  startPickedGame(playerId, force = false) {
+    if (!['spiel-details', 'wetten'].includes(this.state.phase)) return false;
+    if (!force && playerId !== this.state.round.pickerPlayerId) return false;
     const gameId = this.state.round.gameId;
     if (!gameId) return false;
-
-    if (this.state.round.mode === 'single') {
-      this.state.round.selectedPlayers = {};
-      this.state.phase = 'spielerauswahl';
-      this.touch();
-      return false;
-    }
-
-    return this.startGame(gameId);
-  }
-
-  /** Ein Team waehlt seinen Spieler (nur Einzelspiele, Limit-geprueft). */
-  selectPlayer(teamId, playerIndex) {
-    if (this.state.phase !== 'spielerauswahl') return false;
-    const team = this._team(teamId);
-    const i = Number(playerIndex);
-    if (!team || !team.players[i]) return false;
-    if (team.players[i].einzelCount >= MAX_EINZEL_PRO_SPIELER) return false;
-    this.state.round.selectedPlayers[teamId] = i;
-    this.touch();
-    return true;
-  }
-
-  /**
-   * Startet das in der Spielerauswahl gewaehlte Einzelspiel.
-   * Zaehlt die Einzelspiele der gewaehlten Spieler hoch. Gibt true bei Start.
-   */
-  startSelectedGame() {
-    if (this.state.phase !== 'spielerauswahl') return false;
-    const gameId = this.state.round.gameId;
-    if (!gameId) return false;
-    const selectedTeamCount = Object.keys(this.state.round.selectedPlayers).length;
-    if (selectedTeamCount < this.state.teams.length) return false;
-
-    // Einzelspiel-Zaehler der gewaehlten Spieler erhoehen.
-    for (const [teamId, idx] of Object.entries(this.state.round.selectedPlayers)) {
-      const team = this._team(teamId);
-      if (team && team.players[idx]) team.players[idx].einzelCount += 1;
-    }
     return this.startGame(gameId);
   }
 
@@ -505,17 +587,15 @@ class GameState {
     }
   }
 
-  // ---- Spiele ---------------------------------------------------------------
-
-  /** Startet ein Spiel (Spielpunkte -> 0). Verbrauch wird vom Aufrufer gesetzt. */
   startGame(gameId) {
     if (!this.registry) return false;
     const meta = this.registry.meta(gameId);
     if (!meta) return false;
+    this._clearSpinTimer();
     this.state.activeGame = meta;
     this.state.gameState = {};
-    this.state.teams.forEach((t) => {
-      t.gameScore = 0;
+    this.state.players.forEach((p) => {
+      p.gameScore = 0;
     });
     this.state.buzzer = { status: BUZZER.LOCKED, presses: [] };
     this.state.phase = 'spiel-aktiv';
@@ -523,7 +603,6 @@ class GameState {
     return true;
   }
 
-  /** Beendet das laufende Spiel -> Auswertung (Spielpunkte bleiben sichtbar). */
   endGame() {
     if (this.state.activeGame && this.state.activeGame.id) {
       this._consume(this.state.activeGame.id);
@@ -531,14 +610,20 @@ class GameState {
     this.state.activeGame = null;
     this.state.gameState = {};
     this.state.buzzer = { status: BUZZER.LOCKED, presses: [] };
+    this.state.players.forEach((p) => {
+      p.gameScore = 0;
+    });
+    this.state.round.placements = {};
+    this.state.round.payoutApplied = false;
+    this.state.round.payoutSummary = [];
     this.state.phase = 'auswertung';
     this.touch();
   }
 
-  clearActiveGame() {
+  clearActiveGame(shouldTouch = true) {
     this.state.activeGame = null;
     this.state.gameState = {};
-    this.touch();
+    if (shouldTouch) this.touch();
   }
 
   setGameState(partial) {
@@ -546,13 +631,13 @@ class GameState {
     this.touch();
   }
 
-  /** Naechste Runde. Nach Runde 8 geht es in die Bonus-Phase. */
   nextRound() {
     const next = this.state.round.index + 1;
-    this.clearActiveGame();
+    this.clearActiveGame(false);
     this.state.buzzer = { status: BUZZER.LOCKED, presses: [] };
     if (next >= TOTAL_ROUNDS) {
-      this.state.phase = 'bonus';
+      this._clearSpinTimer();
+      this.state.phase = 'finale';
       this.touch();
       return;
     }
@@ -561,53 +646,192 @@ class GameState {
     this.touch();
   }
 
-  gotoBonus() {
-    this.clearActiveGame();
-    this.state.phase = 'bonus';
-    this.touch();
-  }
-
   gotoFinale() {
-    this.clearActiveGame();
+    this._clearSpinTimer();
+    this.clearActiveGame(false);
     this.state.phase = 'finale';
     this.touch();
   }
 
   resetAll() {
-    // Teamnamen, Spielernamen & Farben behalten; alle Punkte/Zaehler/Ablauf -> 0.
-    const teams = this.state.teams.map((t) => ({
-      ...t,
-      score: 0,
+    const players = this.state.players.map((p) => ({
+      ...p,
+      score: STARTING_COINS,
       gameScore: 0,
-      players: (t.players || defaultPlayers()).map((p) => ({ name: p.name, einzelCount: 0 })),
     }));
     const clients = this.state.clients;
+    this._clearSpinTimer();
     this.state = defaultState();
-    this.state.teams = teams;
+    this.state.players = players;
     this.state.clients = clients;
     this.touch();
   }
+
+  _scheduleSpinFinish(delayMs) {
+    this._clearSpinTimer();
+    this._spinTimer = setTimeout(() => {
+      this._spinTimer = null;
+      this.finishSpin();
+    }, Math.max(0, delayMs));
+  }
+
+  _clearSpinTimer() {
+    if (this._spinTimer) {
+      clearTimeout(this._spinTimer);
+      this._spinTimer = null;
+    }
+  }
 }
 
-/** Stellt sicher, dass ein Team genau 2 Spieler mit name + einzelCount hat. */
 function normalizePlayers(players) {
   const base = defaultPlayers();
   if (!Array.isArray(players)) return base;
-  return base.map((def, i) => ({
-    name: (players[i] && players[i].name) || def.name,
-    einzelCount: Number(players[i] && players[i].einzelCount) || 0,
-  }));
+  return base.map((def, i) => {
+    const saved = players[i] || {};
+    return {
+      id: def.id,
+      name: saved.name || def.name,
+      score: Number.isFinite(Number(saved.score)) ? Number(saved.score) : STARTING_COINS,
+      gameScore: Number(saved.gameScore) || 0,
+      color: saved.color || def.color,
+    };
+  });
 }
 
-function germanToMode(value) {
-  if (value === 'einzeln') return 'single';
-  if (value === 'gemeinsam') return 'group';
-  if (value === 'single' || value === 'group') return value;
-  return null;
+function normalizeClients(clients, players) {
+  if (!clients || typeof clients !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(clients).map(([id, client]) => [
+      id,
+      normalizeClient(client, players),
+    ])
+  );
 }
 
-function modeToGerman(value) {
-  return value === 'group' ? 'gemeinsam' : 'einzeln';
+function normalizeClient(client, players) {
+  const ids = new Set(players.map((p) => p.id));
+  const legacyPlayerId = legacyTeamIdToPlayerId(client && client.teamId);
+  const playerId = ids.has(client && client.playerId)
+    ? client.playerId
+    : ids.has(legacyPlayerId)
+    ? legacyPlayerId
+    : null;
+  return {
+    playerId,
+    role: (client && client.role) || 'play',
+    connected: false,
+    lastSeen: Number(client && client.lastSeen) || 0,
+    socketId: client && client.socketId,
+  };
+}
+
+function normalizeBuzzer(buzzer) {
+  return {
+    status: Object.values(BUZZER).includes(buzzer && buzzer.status)
+      ? buzzer.status
+      : BUZZER.LOCKED,
+    presses: Array.isArray(buzzer && buzzer.presses)
+      ? buzzer.presses
+          .map((p, i) => ({
+            playerId: p.playerId || legacyTeamIdToPlayerId(p.teamId),
+            clientId: p.clientId,
+            ts: Number(p.ts) || Date.now(),
+            order: Number(p.order) || i + 1,
+          }))
+          .filter((p) => p.playerId)
+      : [],
+  };
+}
+
+function normalizeRound(round) {
+  const base = defaultRound();
+  if (!round || typeof round !== 'object') return base;
+  const category = round.category || (round.kategorie ? normalizeCategory(round.kategorie) : null);
+  const pickerPlayerId = round.pickerPlayerId || legacyTeamIdToPlayerId(round.pickerTeamId);
+  return {
+    ...base,
+    ...round,
+    total: TOTAL_ROUNDS,
+    pickerPlayerId: pickerPlayerId || null,
+    category,
+    kategorie: category ? categoryToGerman(category) : null,
+    availableCategories: Array.isArray(round.availableCategories)
+      ? round.availableCategories.map(normalizeCategory)
+      : Array.isArray(round.availableKategorien)
+      ? round.availableKategorien.map(normalizeCategory)
+      : [],
+    availableKategorien: Array.isArray(round.availableKategorien)
+      ? round.availableKategorien
+      : Array.isArray(round.availableCategories)
+      ? round.availableCategories.map(categoryToGerman)
+      : [],
+    choices: Array.isArray(round.choices) ? round.choices : [],
+    selectedGame: round.selectedGame || null,
+    spin: normalizeSpin(round.spin),
+    bets: normalizeBets(round.bets),
+    placements: normalizePlacements(round.placements),
+    payoutApplied: round.payoutApplied === true,
+    payoutSummary: Array.isArray(round.payoutSummary) ? round.payoutSummary : [],
+  };
+}
+
+function normalizeBets(bets) {
+  if (!bets || typeof bets !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(bets)
+      .map(([playerId, bet]) => [
+        playerId,
+        {
+          playerId: bet.playerId || playerId,
+          targetPlayerId: bet.targetPlayerId || null,
+          amount: clampInt(bet.amount, 0, MAX_BET),
+          submittedAt: Number(bet.submittedAt) || 0,
+        },
+      ])
+      .filter(([, bet]) => bet.playerId)
+  );
+}
+
+function normalizePlacements(placements) {
+  if (!placements || typeof placements !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(placements)
+      .map(([playerId, place]) => [playerId, clampInt(place, 1, PLAYER_COUNT)])
+      .filter(([, place]) => place >= 1 && place <= PLAYER_COUNT)
+  );
+}
+
+function normalizeSpin(spin) {
+  if (!spin || typeof spin !== 'object') return defaultSpin();
+  return {
+    ...defaultSpin(),
+    ...spin,
+    durationMs: Number(spin.durationMs) || SPIN_DURATION_MS,
+    sequence: Array.isArray(spin.sequence) ? spin.sequence : [],
+  };
+}
+
+function buildSpinSequence(choices, winnerIndex) {
+  const sequence = [];
+  const loops = 9;
+  for (let i = 0; i < loops; i += 1) {
+    choices.forEach((choice, index) => {
+      sequence.push({ ...choice, spinIndex: i * choices.length + index });
+    });
+  }
+  sequence.push({ ...choices[winnerIndex], spinIndex: sequence.length, winner: true });
+  return sequence;
+}
+
+function clampInt(value, min, max) {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+function legacyTeamIdToPlayerId(teamId) {
+  const match = /^team([1-5])$/.exec(String(teamId || ''));
+  return match ? `player${match[1]}` : null;
 }
 
 function normalizeCategory(value) {
@@ -621,35 +845,14 @@ function categoryToGerman(value) {
   return value === 'skill' ? 'geschicklichkeit' : value;
 }
 
-function normalizeRound(round) {
-  const mode = round.mode || germanToMode(round.modus);
-  const category = round.category || (round.kategorie ? normalizeCategory(round.kategorie) : null);
-  return {
-    ...defaultRound(),
-    ...round,
-    mode,
-    modus: mode ? modeToGerman(mode) : null,
-    category,
-    kategorie: category ? categoryToGerman(category) : null,
-    availableCategories: Array.isArray(round.availableCategories)
-      ? round.availableCategories.map(normalizeCategory)
-      : Array.isArray(round.availableKategorien)
-      ? round.availableKategorien.map(normalizeCategory)
-      : [],
-    availableKategorien: Array.isArray(round.availableKategorien)
-      ? round.availableKategorien
-      : Array.isArray(round.availableCategories)
-      ? round.availableCategories.map(categoryToGerman)
-      : [],
-    selectedGame: round.selectedGame || null,
-  };
-}
-
 module.exports = {
   GameState,
   PHASES,
   BUZZER,
-  ROUND_PLAN,
+  PLAYER_COUNT,
   TOTAL_ROUNDS,
-  MAX_EINZEL_PRO_SPIELER,
+  SPIN_DURATION_MS,
+  STARTING_COINS,
+  MAX_BET,
+  RANK_AWARDS,
 };

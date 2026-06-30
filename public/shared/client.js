@@ -30,7 +30,7 @@
   let lastState = null;
 
   socket.on('connect', () => {
-    // Bei (Re)Connect immer neu identifizieren -> Server stellt Team/Rolle wieder her.
+    // Bei (Re)Connect immer neu identifizieren -> Server stellt Spieler/Rolle wieder her.
     socket.emit('identify', { clientId, role });
     setStatus(true);
   });

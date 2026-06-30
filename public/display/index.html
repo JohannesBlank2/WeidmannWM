@@ -9,9 +9,14 @@
     body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
     header.bar {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 14px 28px; border-bottom: 1px solid var(--line); background: var(--bg2);
+      padding: 14px 28px; border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #2c0d14, var(--bg2));
+      box-shadow: 0 0 34px rgba(255,47,79,.16);
     }
-    header.bar h1 { font-size: 1.6rem; margin: 0; }
+    header.bar h1 {
+      font-size: 1.6rem; margin: 0; color: var(--accent);
+      text-shadow: 0 0 14px rgba(255,209,92,.45);
+    }
     .phase-pill {
       padding: 6px 16px; border-radius: 999px; background: var(--panel);
       border: 1px solid var(--line); font-size: 1rem; text-transform: capitalize;
@@ -19,6 +24,9 @@
     main.stage {
       flex: 1; display: flex; align-items: center; justify-content: center;
       padding: 24px; position: relative; overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(255,47,79,.09), transparent 24%, transparent 76%, rgba(255,209,92,.08)),
+        linear-gradient(180deg, transparent, rgba(0,0,0,.26));
     }
     #content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
     .idle { text-align: center; color: var(--muted); }
@@ -32,13 +40,82 @@
     .choices-title { font-size: 1.6rem; margin-bottom: 24px; }
     .choices { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
     .choice-card {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
       padding: 28px 32px; min-width: 220px;
     }
     .choice-card .cn { font-size: 1.8rem; font-weight: 800; }
     .choice-card .cm { color: var(--muted); margin-top: 8px; font-size: 1.1rem; }
 
-    footer.scores { padding: 18px 28px; border-top: 1px solid var(--line); background: var(--bg2); }
+    /* Kategorie-Spin: Slot Machine */
+    .slot-wrap { width: min(1120px, 96vw); text-align: center; }
+    .slot-machine {
+      position: relative; padding: 24px; border: 2px solid #9a332a; border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255,209,92,.16), transparent 18%),
+        linear-gradient(180deg, #3a0d17, #13060a);
+      box-shadow: 0 18px 48px rgba(0,0,0,.48), inset 0 0 0 3px rgba(255,209,92,.12);
+    }
+    .slot-machine::before {
+      content: "WEIDMANN CASINO"; display: block; margin-bottom: 18px;
+      color: var(--accent); font-weight: 900; font-size: 1.35rem;
+      letter-spacing: .18em; text-shadow: 0 0 16px rgba(255,209,92,.55);
+    }
+    .reels {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px; align-items: stretch;
+    }
+    .reel-window {
+      height: 160px; overflow: hidden; padding: 10px;
+      border: 2px solid #f6c755; border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.08), transparent 35%, rgba(0,0,0,.35)),
+        #12080b;
+      box-shadow: inset 0 0 22px rgba(0,0,0,.72), 0 0 16px rgba(255,209,92,.18);
+    }
+    .reel-track {
+      display: flex; flex-direction: column; gap: 12px;
+      will-change: transform; transform: translateY(0);
+    }
+    .reel-track.spinning {
+      animation: reel-spin var(--spin-duration, 4400ms) cubic-bezier(.08,.72,.13,1) forwards;
+    }
+    .slot-card {
+      height: 136px; border-radius: 8px; flex: 0 0 136px;
+      background: linear-gradient(180deg, #fff8df, #f3d79a);
+      border: 2px solid #8b5420; color: #251005;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 16px; text-align: center;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+    }
+    .slot-card .cn { font-size: clamp(1.1rem, 2.2vw, 1.55rem); font-weight: 900; line-height: 1.08; }
+    .slot-card .cm { color: #7b3d17; margin-top: 8px; font-size: 1rem; font-weight: 700; }
+    .slot-card.winner-card {
+      background: linear-gradient(180deg, #fff2a8, #ffd15c);
+      border-color: #fff3bd;
+      box-shadow: 0 0 0 3px rgba(255,209,92,.2) inset, 0 0 20px rgba(255,209,92,.4);
+    }
+    .near-miss-row {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px; margin-top: 16px;
+    }
+    .near-miss-card {
+      min-height: 58px; display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255,209,92,.35); border-radius: 8px;
+      background: rgba(12, 5, 8, .68); color: var(--muted);
+      padding: 8px 10px; font-weight: 800;
+    }
+    .slot-result {
+      display: grid; gap: 18px; width: min(1060px, 96vw); margin: 0 auto 18px;
+    }
+    @keyframes reel-spin {
+      from { transform: translateY(0); }
+      to { transform: translateY(calc(-1 * var(--reel-shift, 0px))); }
+    }
+
+    footer.scores {
+      padding: 18px 28px; border-top: 1px solid var(--line);
+      background: linear-gradient(180deg, #19080d, var(--bg2));
+    }
 
     /* Buzzer-Gewinner-Overlay */
     #winner {
@@ -47,7 +124,7 @@
       background: rgba(0,0,0,.65); z-index: 50;
     }
     #winner.show { display: flex; animation: pop .25s ease; }
-    #winner .wname { font-size: 5rem; font-weight: 900; }
+    #winner .wname { font-size: 5rem; font-weight: 900; text-shadow: 0 0 18px rgba(255,209,92,.5); }
     #winner .wsub { font-size: 1.6rem; color: var(--muted); margin-top: 10px; }
     @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
@@ -58,7 +135,7 @@
 </head>
 <body>
   <header class="bar">
-    <h1>🏆 Weidmann WM</h1>
+    <h1>WEIDMANN CASINO</h1>
     <div>
       <span class="phase-pill" id="phase">lobby</span>
       <span class="conn-badge offline" data-conn>getrennt</span>
@@ -70,12 +147,12 @@
     <div id="winner"><div class="wname"></div><div class="wsub">hat zuerst gebuzzert!</div></div>
     <div class="qr-corner" id="join-qr">
       <img id="qr-play" alt="QR" />
-      <div>Mitspielen → /play</div>
+      <div>Mitspielen -> /play</div>
     </div>
   </main>
 
   <footer class="scores">
-    <div class="board-label" id="board-label">Gesamtwertung</div>
+    <div class="board-label" id="board-label">Coin-Wertung</div>
     <div class="scoreboard" id="scoreboard"></div>
   </footer>
 

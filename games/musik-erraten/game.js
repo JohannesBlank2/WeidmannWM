@@ -11,12 +11,13 @@ module.exports = {
   id: 'musik-erraten',
   mode: 'single',
   category: 'quiz',
-  title: 'Musik erraten',
+  title: 'Shazam',
   responsiblePerson: 'TBD',
   description: 'Songs oder Ausschnitte muessen moeglichst schnell erkannt werden.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Musikclips', 'Lautsprecher'],
   hasBeenPlayed: false,
+  selectable: true,
   interaktionstyp: 'keine', // TBD beim Bauen
   built: false,
 };

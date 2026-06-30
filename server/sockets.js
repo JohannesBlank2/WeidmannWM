@@ -1,25 +1,28 @@
 'use strict';
 
-const { BUZZER } = require('./state');
-
 /**
  * Verdrahtet alle Socket.IO-Events.
  *
- * Grundprinzip:
- *  - Der komplette State wird per 'state'-Event an ALLE Clients gebroadcastet.
- *    Clients rendern rein aus diesem State (Single Source of Truth).
- *  - Zusaetzlich gibt es schmale "Effekt"-Events (z.B. 'fx:buzzer-winner'),
- *    die Sound/Animation ausloesen, ohne State zu sein.
- *  - Admin-Events mutieren den State. Spiel-spezifische Aktionen werden an das
- *    aktive Spiel-Modul (Registry-Hook onAction) weitergereicht.
+ * Der komplette State wird per 'state' an alle Clients gebroadcastet.
+ * Admin, Handy und TV rendern daraus ihre jeweilige Sicht. Spielmodule
+ * bekommen optionale Hooks ueber ctx und koennen weiterhin eigene Aktionen
+ * senden, ohne den Kern anfassen zu muessen.
  */
 function attachSockets(io, gameState, registry) {
-  // Broadcast bei jeder State-Aenderung.
   gameState.setOnChange((state) => {
-    io.emit('state', state);
+    broadcastState(state);
   });
 
-  // ctx-Objekt, das Spiel-Module in ihren Hooks bekommen.
+  function broadcastState(state) {
+    for (const [, socket] of io.sockets.sockets) {
+      socket.emit('state', clientState(state, socket.data.clientId, socket.data.role));
+    }
+  }
+
+  function emitState(socket) {
+    socket.emit('state', clientState(gameState.get(), socket.data.clientId, socket.data.role));
+  }
+
   function gameCtx() {
     return {
       state: gameState.get(),
@@ -27,8 +30,7 @@ function attachSockets(io, gameState, registry) {
       armBuzzer: () => gameState.armBuzzer(),
       lockBuzzer: () => gameState.lockBuzzer(),
       resetBuzzer: () => gameState.resetBuzzer(),
-      addPoints: (teamId, delta) => gameState.addPoints(teamId, delta),
-      // Effekt an alle Clients schicken (Sound/Animation), kein State.
+      addPoints: (playerId, delta) => gameState.addPoints(playerId, delta),
       emit: (event, payload) => io.emit(event, payload),
     };
   }
@@ -46,147 +48,134 @@ function attachSockets(io, gameState, registry) {
     }
   }
 
+  function payloadPlayerId(payload = {}) {
+    return payload.playerId || legacyTeamIdToPlayerId(payload.teamId);
+  }
+
   io.on('connection', (socket) => {
     let clientId = null;
 
-    // ---- Identifikation / Reconnect ----------------------------------------
-    // Client meldet sich mit seiner in localStorage gespeicherten clientId.
     socket.on('identify', ({ clientId: cid, role } = {}) => {
       if (!cid) return;
       clientId = cid;
       socket.data.clientId = cid;
+      socket.data.role = role || 'play';
 
       gameState.upsertClient(cid, {
-        role: role || 'play',
+        role: socket.data.role,
         connected: true,
         socketId: socket.id,
       });
 
-      // Aktuellen State direkt an genau diesen Client (auch fuer Reconnect).
-      socket.emit('state', gameState.get());
+      emitState(socket);
       socket.emit('hello', { clientId: cid, games: registry.list() });
     });
 
-    // ---- Team beitreten -----------------------------------------------------
+    // ---- Spieler beitreten -------------------------------------------------
+    socket.on('join-player', ({ playerId } = {}) => {
+      if (!clientId) return;
+      gameState.joinPlayer(clientId, playerId);
+    });
+
+    // Alias fuer alte Clients waehrend der Migration.
     socket.on('join-team', ({ teamId } = {}) => {
       if (!clientId) return;
-      gameState.joinTeam(clientId, teamId);
+      gameState.joinPlayer(clientId, legacyTeamIdToPlayerId(teamId));
     });
 
-    // ---- Pick-Ablauf (auswaehlendes Team auf seinem iPad) ------------------
-    // Nur das in der aktuellen Runde auswaehlende Team darf waehlen (Server prueft).
+    // ---- Handy: Kategorie und Spin -----------------------------------------
     socket.on('pick:kategorie', ({ kategorie } = {}) => {
       if (!clientId) return;
-      gameState.chooseKategorie(gameState.teamOfClient(clientId), kategorie);
+      gameState.chooseKategorie(gameState.playerOfClient(clientId), kategorie);
     });
 
-    socket.on('pick:spiel', ({ gameId } = {}) => {
+    socket.on('pick:spin', () => {
       if (!clientId) return;
-      gameState.chooseSpiel(gameState.teamOfClient(clientId), gameId);
-    });
-
-    socket.on('pick:start-game', () => {
-      if (!clientId) return;
-      const started = gameState.startPickedGame(gameState.teamOfClient(clientId));
-      if (started) runActiveGameHook('onStart');
+      gameState.startSpin(gameState.playerOfClient(clientId));
     });
 
     socket.on('pick:back-to-categories', () => {
       if (!clientId) return;
-      gameState.backToKategorieAuswahl(gameState.teamOfClient(clientId));
+      gameState.backToKategorieAuswahl(gameState.playerOfClient(clientId));
     });
 
-    // Spielerauswahl (nur Einzelspiele): jedes Team waehlt seinen Spieler.
-    socket.on('pick:spieler', ({ playerIndex } = {}) => {
+    socket.on('bet:set', ({ targetPlayerId, amount } = {}) => {
       if (!clientId) return;
-      gameState.selectPlayer(gameState.teamOfClient(clientId), playerIndex);
+      gameState.setBet(gameState.playerOfClient(clientId), targetPlayerId, amount);
     });
 
-    socket.on('pick:start-selected-game', () => {
+    // Start vom Handy bleibt erlaubt, falls man ohne Admin testen will.
+    socket.on('pick:start-game', () => {
       if (!clientId) return;
-      const state = gameState.get();
-      if (gameState.teamOfClient(clientId) !== state.round.pickerTeamId) return;
-      if (gameState.startSelectedGame()) runActiveGameHook('onStart');
+      const started = gameState.startPickedGame(gameState.playerOfClient(clientId));
+      if (started) runActiveGameHook('onStart');
     });
 
-    // ---- Buzzer (Spieler) ---------------------------------------------------
+    // ---- Buzzer ------------------------------------------------------------
     socket.on('buzz', () => {
       if (!clientId) return;
       const press = gameState.registerBuzz(clientId);
       if (!press) return;
 
-      // Gewinner (erster Buzz) -> Effekt fuer Display (Sound + Highlight).
       if (press.order === 1) {
-        const team = gameState.get().teams.find((t) => t.id === press.teamId);
+        const player = gameState.get().players.find((p) => p.id === press.playerId);
         io.emit('fx:buzzer-winner', {
-          teamId: press.teamId,
-          teamName: team ? team.name : press.teamId,
-          color: team ? team.color : '#fff',
+          playerId: press.playerId,
+          playerName: player ? player.name : press.playerId,
+          color: player ? player.color : '#fff',
         });
       }
-      // Aktives Spiel ueber den Buzz informieren (optionaler Hook).
+
       runActiveGameHook('onAction', { clientId }, { type: 'buzz', press });
     });
 
-    // ---- Generische Spiel-Aktion (Spieler oder Admin) ----------------------
-    // Wird an das aktive Spiel-Modul weitergereicht. So koennen Spiele eigene
-    // Interaktionen definieren, ohne den Kern zu aendern.
     socket.on('game:action', (action = {}) => {
       if (!clientId) return;
       runActiveGameHook('onAction', { clientId }, action);
     });
 
-    // ---- Admin-Steuerung ----------------------------------------------------
+    // ---- Admin-Steuerung ---------------------------------------------------
     socket.on('admin:set-phase', ({ phase } = {}) => gameState.setPhase(phase));
 
+    socket.on('admin:rename-player', ({ playerId, teamId, name } = {}) =>
+      gameState.renamePlayer(playerId || legacyTeamIdToPlayerId(teamId), name));
+
     socket.on('admin:rename-team', ({ teamId, name } = {}) =>
-      gameState.renameTeam(teamId, name));
+      gameState.renamePlayer(legacyTeamIdToPlayerId(teamId), name));
 
-    socket.on('admin:rename-player', ({ teamId, playerIndex, name } = {}) =>
-      gameState.renamePlayer(teamId, playerIndex, name));
+    socket.on('admin:points', (payload = {}) =>
+      gameState.addPoints(payloadPlayerId(payload), payload.delta));
 
-    // Gesamtpunkte (persistent) — bewusst nur +1 / -1.
-    socket.on('admin:points', ({ teamId, delta } = {}) =>
-      gameState.addPoints(teamId, delta));
+    socket.on('admin:set-points', (payload = {}) =>
+      gameState.setPoints(payloadPlayerId(payload), payload.value));
 
-    socket.on('admin:set-points', ({ teamId, value } = {}) =>
-      gameState.setPoints(teamId, value));
-
-    // Spielpunkte (temporaer, getrennt von der Gesamtpunktzahl).
-    socket.on('admin:game-points', ({ teamId, delta } = {}) =>
-      gameState.addGamePoints(teamId, delta));
+    socket.on('admin:game-points', (payload = {}) =>
+      gameState.addGamePoints(payloadPlayerId(payload), payload.delta));
 
     socket.on('admin:reset-game-points', () => gameState.resetGameScores());
+    socket.on('admin:set-placement', ({ playerId, place } = {}) =>
+      gameState.setPlacement(playerId, place));
+    socket.on('admin:clear-placement', ({ playerId } = {}) =>
+      gameState.clearPlacement(playerId));
+    socket.on('admin:apply-payouts', () => gameState.applyPayouts());
 
-    // ---- Admin: Runden-/Pick-Ablauf ----------------------------------------
     socket.on('admin:show-start', () => gameState.startShow());
     socket.on('admin:open-kategorie', () => gameState.openKategorieAuswahl());
     socket.on('admin:next-round', () => gameState.nextRound());
-    socket.on('admin:goto-bonus', () => gameState.gotoBonus());
     socket.on('admin:goto-finale', () => gameState.gotoFinale());
 
-    // Admin kann Kategorie/Spiel/Spieler stellvertretend waehlen (Override).
     socket.on('admin:pick-kategorie', ({ kategorie } = {}) =>
       gameState.chooseKategorie(null, kategorie, true));
 
-    socket.on('admin:pick-spiel', ({ gameId } = {}) => {
-      gameState.chooseSpiel(null, gameId, true);
-    });
-
-    socket.on('admin:pick-spieler', ({ teamId, playerIndex } = {}) =>
-      gameState.selectPlayer(teamId, playerIndex));
-
-    socket.on('admin:start-picked-game', () => {
-      if (gameState.startPickedGame(null, true)) runActiveGameHook('onStart');
-    });
+    socket.on('admin:start-spin', () => gameState.startSpin(null, true));
+    socket.on('admin:finish-spin', () => gameState.finishSpin());
 
     socket.on('admin:back-to-categories', () => {
       gameState.backToKategorieAuswahl(null, true);
     });
 
-    // Nach der Spielerauswahl: Einzelspiel starten (Zaehler hochzaehlen).
-    socket.on('admin:start-selected-game', () => {
-      if (gameState.startSelectedGame()) runActiveGameHook('onStart');
+    socket.on('admin:start-picked-game', () => {
+      if (gameState.startPickedGame(null, true)) runActiveGameHook('onStart');
     });
 
     socket.on('admin:buzzer', ({ action } = {}) => {
@@ -200,12 +189,10 @@ function attachSockets(io, gameState, registry) {
       }
     });
 
-    // Spiel direkt starten (Override/Test, ausserhalb des Pick-Ablaufs).
     socket.on('admin:start-game', ({ gameId } = {}) => {
       if (gameState.startGame(gameId)) runActiveGameHook('onStart');
     });
 
-    // Spiel beenden -> Auswertung (Spielpunkte bleiben sichtbar).
     socket.on('admin:stop-game', () => {
       runActiveGameHook('onStop');
       gameState.endGame();
@@ -215,13 +202,45 @@ function attachSockets(io, gameState, registry) {
       gameState.resetAll();
     });
 
-    // ---- Trennung -----------------------------------------------------------
     socket.on('disconnect', () => {
       if (clientId) {
         gameState.setClientConnected(clientId, false);
       }
     });
   });
+}
+
+function legacyTeamIdToPlayerId(teamId) {
+  const match = /^team([1-5])$/.exec(String(teamId || ''));
+  return match ? `player${match[1]}` : null;
+}
+
+function clientState(state, clientId, role) {
+  const out = JSON.parse(JSON.stringify(state));
+  const playerId = state.clients && state.clients[clientId]
+    ? state.clients[clientId].playerId
+    : null;
+  const bets = (state.round && state.round.bets) || {};
+  const revealBets =
+    role === 'admin' &&
+    (state.phase === 'auswertung' || state.phase === 'finale' || state.round.payoutApplied);
+
+  out.round.bets = {};
+  out.round.betStatus = state.players.map((player) => {
+    const bet = bets[player.id] || null;
+    const submitted = !!bet;
+    if (revealBets) {
+      out.round.bets[player.id] = bet;
+    } else if (player.id === playerId && bet) {
+      out.round.bets[player.id] = bet;
+    } else {
+      out.round.bets[player.id] = { playerId: player.id, submitted };
+    }
+    return { playerId: player.id, submitted };
+  });
+  out.round.betCount = out.round.betStatus.filter((entry) => entry.submitted).length;
+  out.round.betTotal = state.players.length;
+  return out;
 }
 
 module.exports = { attachSockets };

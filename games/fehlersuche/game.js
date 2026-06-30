@@ -11,12 +11,13 @@ module.exports = {
   id: 'fehlersuche',
   mode: 'single',
   category: 'quiz',
-  title: 'Fehlersuche',
+  title: '2016?',
   responsiblePerson: 'TBD',
-  description: 'In Bildern oder Szenen muessen Unterschiede gefunden werden.',
+  description: 'Quizrunde rund um das Jahr 2016.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
-  materials: ['Fehlersuche-Bilder'],
+  materials: ['Fragen zu 2016'],
   hasBeenPlayed: false,
+  selectable: true,
   interaktionstyp: 'keine', // TBD beim Bauen
   built: false,
 };

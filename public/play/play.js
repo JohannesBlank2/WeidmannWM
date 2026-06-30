@@ -1,8 +1,8 @@
-/* Spieler-Ansicht (iPad): Team waehlen, Pick-Ablauf, Buzzer, Spiel-Modul. */
+/* Handy-Ansicht: Spieler waehlen, Kategorie aussuchen, Spin ausloesen, Spielcontent sehen. */
 (function () {
   const whoEl = document.getElementById('who');
-  const teamSelect = document.getElementById('team-select');
-  const teamGrid = document.getElementById('team-grid');
+  const playerSelect = document.getElementById('player-select');
+  const playerGrid = document.getElementById('player-grid');
   const playArea = document.getElementById('play-area');
   const pickArea = document.getElementById('pick-area');
   const gameArea = document.getElementById('game-area');
@@ -20,31 +20,42 @@
   };
   const host = window.createGameHost(gameArea, ctx);
 
-  function renderTeams(state) {
+  function renderPlayers(state) {
     const me = App.me(state);
-    const myTeam = me && me.teamId;
-    teamGrid.innerHTML = state.teams
-      .map((t) => `
-      <button class="team-btn ${myTeam === t.id ? 'active' : ''}"
-              style="--tc:${t.color}" data-team="${t.id}">${escapeHtml(t.name)}</button>`)
+    const myPlayer = me && me.playerId;
+    playerGrid.innerHTML = state.players
+      .map((p) => `
+      <button class="player-btn ${myPlayer === p.id ? 'active' : ''}"
+              style="--pc:${p.color}" data-player="${p.id}">
+        ${escapeHtml(p.name)}
+        <span>${p.score} Coins</span>
+      </button>`)
       .join('');
-    teamGrid.querySelectorAll('[data-team]').forEach((btn) => {
-      btn.onclick = () => App.socket.emit('join-team', { teamId: btn.dataset.team });
+    playerGrid.querySelectorAll('[data-player]').forEach((btn) => {
+      btn.onclick = () => App.socket.emit('join-player', { playerId: btn.dataset.player });
     });
   }
 
-  function renderPick(state, myTeam) {
-    const r = state.round;
-    const isPicker = myTeam && myTeam === r.pickerTeamId;
-    const pickerTeam = r.pickerTeamId && state.teams.find((t) => t.id === r.pickerTeamId);
-    const pickerName = pickerTeam ? pickerTeam.name : '-';
+  function renderPick(state, myPlayerId) {
+    const r = state.round || {};
+    const isPicker = myPlayerId && myPlayerId === r.pickerPlayerId;
+    const picker = r.pickerPlayerId && state.players.find((p) => p.id === r.pickerPlayerId);
+    const pickerName = picker ? picker.name : '-';
+
+    if (state.phase === 'runden-uebersicht') {
+      pickArea.innerHTML = waiting(
+        `Runde ${r.number}/${r.total}`,
+        `${escapeHtml(pickerName)} waehlt gleich eine Kategorie.`
+      );
+      return;
+    }
 
     if (state.phase === 'kategorie-auswahl') {
       if (isPicker) {
         const categories = r.availableCategories || [];
         pickArea.innerHTML =
-          `<div class="pick-title">Runde ${r.number}<br>Modus: ${modeLabel(r.mode)}<br>Auswahl durch: ${escapeHtml(pickerName)}</div>` +
-          '<div class="pick-title">Waehle eine Kategorie:</div>' +
+          `<div class="pick-title">Du bist dran: Runde ${r.number}/${r.total}</div>` +
+          '<div class="pick-sub">Kategorie waehlen</div>' +
           '<div class="pick-grid">' +
           categories.map((k) => `<button class="pick-btn" data-kat="${k}">${categoryLabel(k)}</button>`).join('') +
           '</div>';
@@ -52,96 +63,81 @@
           b.onclick = () => App.socket.emit('pick:kategorie', { kategorie: b.dataset.kat });
         });
       } else {
-        pickArea.innerHTML = waiting(`${escapeHtml(pickerName)} waehlt eine Kategorie ...`);
+        pickArea.innerHTML = waiting(`${escapeHtml(pickerName)} waehlt eine Kategorie ...`, '');
       }
-      return true;
+      return;
     }
 
-    if (state.phase === 'spiel-auswahl') {
+    if (state.phase === 'spin-bereit') {
+      const choices = (r.choices || []).map(gameButton).join('');
       if (isPicker) {
-        if (!r.choices.length) {
-          pickArea.innerHTML =
-            `<div class="pick-title">Runde ${r.number}<br>Modus: ${modeLabel(r.mode)}<br>Gewaehlte Kategorie: ${categoryLabel(r.category)}</div>` +
-            '<div class="waiting"><div class="big">Alle Spiele in dieser Kategorie wurden bereits gespielt.</div></div>' +
-            '<button class="pick-btn" data-backcat>Zurueck zur Kategorie-Auswahl</button>';
-          pickArea.querySelector('[data-backcat]').onclick = () => App.socket.emit('pick:back-to-categories');
-          return true;
-        }
-
         pickArea.innerHTML =
-          `<div class="pick-title">Runde ${r.number}<br>Modus: ${modeLabel(r.mode)}<br>Gewaehlte Kategorie: ${categoryLabel(r.category)}</div>` +
-          '<div class="pick-title">Waehle ein Spiel:</div>' +
-          '<div class="pick-grid">' +
-          r.choices.map((c) => gameButton(c)).join('') +
-          '</div>' +
-          '<button class="pick-btn" data-backcat style="margin-top:12px;">Zurueck zur Kategorie-Auswahl</button>';
-        pickArea.querySelectorAll('[data-game]').forEach((b) => {
-          b.onclick = () => App.socket.emit('pick:spiel', { gameId: b.dataset.game });
-        });
-        pickArea.querySelector('[data-backcat]').onclick = () => App.socket.emit('pick:back-to-categories');
+          `<div class="pick-title">${categoryLabel(r.category)} ist gesetzt</div>` +
+          '<div class="pick-sub">Auf dem TV stehen diese Spiele im Spin.</div>' +
+          `<div class="choice-list">${choices}</div>` +
+          '<button class="spin-btn" data-spin>SPIN</button>';
+        pickArea.querySelector('[data-spin]').onclick = () => App.socket.emit('pick:spin');
       } else {
-        pickArea.innerHTML = waiting(`${escapeHtml(pickerName)} waehlt ein Spiel ...`);
+        pickArea.innerHTML =
+          waiting(`${escapeHtml(pickerName)} darf jetzt spinnen.`, '') +
+          `<div class="choice-list">${choices}</div>`;
       }
-      return true;
+      return;
+    }
+
+    if (state.phase === 'spin-laeuft') {
+      pickArea.innerHTML =
+        waiting('Spin laeuft auf dem TV ...', 'Das Spiel wird gerade ausgelost.') +
+        spinChoiceList(r);
+      return;
     }
 
     if (state.phase === 'spiel-details') {
-      if (isPicker) {
-        pickArea.innerHTML =
-          gameDetails(r.selectedGame) +
-          '<div class="pick-grid" style="margin-top:12px;">' +
-          '<button class="pick-btn" data-start-picked>Spiel starten</button>' +
-          '<button class="pick-btn" data-backcat>Zurueck zur Kategorie-Auswahl</button>' +
-          '</div>';
-        pickArea.querySelector('[data-start-picked]').onclick = () => App.socket.emit('pick:start-game');
-        pickArea.querySelector('[data-backcat]').onclick = () => App.socket.emit('pick:back-to-categories');
-      } else {
-        pickArea.innerHTML = waiting(`${escapeHtml(pickerName)} bereitet das Spiel vor ...`);
+      pickArea.innerHTML =
+        gameDetails(r.selectedGame) +
+        '<div class="waiting" style="padding-top:12px;">Admin startet das Spiel.</div>';
+      return;
+    }
+
+    if (state.phase === 'wetten') {
+      pickArea.innerHTML = bettingHtml(state, myPlayerId);
+      const submit = pickArea.querySelector('[data-submit-bet]');
+      if (submit) {
+        submit.onclick = () => {
+          const target = pickArea.querySelector('[data-bet-target]').value;
+          const amount = Number(pickArea.querySelector('[data-bet-amount]').value);
+          App.socket.emit('bet:set', { targetPlayerId: target || null, amount });
+        };
       }
-      return true;
-    }
-
-    if (state.phase === 'spielerauswahl') {
-      pickArea.innerHTML = playerSelectionHtml(state, myTeam, isPicker);
-      pickArea.querySelectorAll('[data-player-index]').forEach((b) => {
-        b.onclick = () => App.socket.emit('pick:spieler', { playerIndex: Number(b.dataset.playerIndex) });
-      });
-      const start = pickArea.querySelector('[data-start-selected]');
-      if (start) start.onclick = () => App.socket.emit('pick:start-selected-game');
-      return true;
-    }
-
-    if (state.phase === 'runden-uebersicht') {
-      pickArea.innerHTML = waiting(
-        `Runde ${r.number}/${r.total} - ${modeLabel(r.mode)}`,
-        `${escapeHtml(pickerName)} waehlt gleich aus.`
-      );
-      return true;
+      return;
     }
 
     if (state.phase === 'auswertung') {
-      pickArea.innerHTML = waiting('Auswertung', 'Punkte werden vergeben ...');
-      return true;
+      pickArea.innerHTML = waiting('Auswertung', 'Coins werden ausgezahlt ...');
+      return;
     }
 
-    if (state.phase === 'bonus' || state.phase === 'finale') {
-      pickArea.innerHTML = waiting(state.phase === 'bonus' ? 'Bonus' : 'Finale', '');
-      return true;
+    if (state.phase === 'finale') {
+      pickArea.innerHTML = waiting('Finale', 'Die Show ist durch.');
+      return;
     }
 
     pickArea.innerHTML = '';
-    return false;
   }
 
   function gameButton(game) {
-    return `<button class="pick-btn" data-game="${game.gameId}">
-      ${escapeHtml(game.title || game.name)}
-      <span class="sub">${categoryLabel(game.category)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</span>
-    </button>`;
+    return `<div class="choice-pill">
+      <b>${escapeHtml(game.title || game.name)}</b>
+      <span>${categoryLabel(game.category)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</span>
+    </div>`;
+  }
+
+  function spinChoiceList(round) {
+    return `<div class="choice-list">${(round.choices || []).map(gameButton).join('')}</div>`;
   }
 
   function gameDetails(game) {
-    if (!game) return '<div class="waiting"><div class="big">Kein Spiel ausgewaehlt.</div></div>';
+    if (!game) return '<div class="waiting"><div class="big">Kein Spiel ausgelost.</div></div>';
     return `
       <div class="card">
         <h2>${escapeHtml(game.title || game.name)}</h2>
@@ -152,31 +148,37 @@
       </div>`;
   }
 
-  function playerSelectionHtml(state, myTeam, isPicker) {
-    const team = state.teams.find((t) => t.id === myTeam);
-    const selected = state.round.selectedPlayers || {};
-    if (!team) return waiting('Team waehlen', '');
+  function bettingHtml(state, myPlayerId) {
+    const round = state.round || {};
+    const player = state.players.find((p) => p.id === myPlayerId);
+    if (!player) return waiting('Spieler waehlen', '');
 
-    const mySelected = selected[team.id];
-    const buttons = (team.players || []).map((p, i) => {
-      const disabled = p.einzelCount >= 2;
-      const active = mySelected === i;
-      return `<button class="pick-btn ${active ? 'good' : ''}" ${disabled ? 'disabled' : ''} data-player-index="${i}">
-        ${escapeHtml(p.name)}
-        <span class="sub">${p.einzelCount}/2 Einzelspiele${disabled ? ' - Limit erreicht' : ''}</span>
-      </button>`;
-    }).join('');
-    const complete = Object.keys(selected).length >= state.teams.length;
-    const status = state.teams.map((t) => {
-      const idx = selected[t.id];
-      return `<div>${escapeHtml(t.name)}: <b>${idx != null && t.players[idx] ? escapeHtml(t.players[idx].name) : 'offen'}</b></div>`;
-    }).join('');
+    const myBet = round.bets && round.bets[myPlayerId] && round.bets[myPlayerId].amount != null
+      ? round.bets[myPlayerId]
+      : null;
+    const targets = state.players.filter((p) => p.id !== myPlayerId);
+    const maxBet = Math.min(50, Math.max(0, player.score));
+    const selectedTarget = myBet && myBet.targetPlayerId
+      ? myBet.targetPlayerId
+      : targets[0] && targets[0].id;
+    const amount = myBet ? myBet.amount : 0;
 
     return `
-      <div class="pick-title">Wer spielt fuer ${escapeHtml(team.name)}?</div>
-      <div class="pick-grid">${buttons}</div>
-      <div class="waiting" style="padding:14px 8px;">${status}</div>
-      ${isPicker ? `<button class="pick-btn" ${complete ? '' : 'disabled'} data-start-selected>Spiel starten</button>` : ''}`;
+      ${gameDetails(round.selectedGame)}
+      <div class="card" style="margin-top:12px;">
+        <h2>Geheimer Einsatz</h2>
+        <div class="muted">Setze 0-${maxBet} Coins auf einen Mitspieler. Trifft dein Tipp auf den Spielsieger, bekommst du den Einsatz als Gewinn. Sonst verlierst du ihn.</div>
+        <label class="bet-label">Mitspieler</label>
+        <select class="bet-input" data-bet-target>
+          ${targets.map((p) => `<option value="${p.id}" ${selectedTarget === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+        </select>
+        <label class="bet-label">Einsatz</label>
+        <input class="bet-input" data-bet-amount type="number" min="0" max="${maxBet}" step="1" value="${amount}" />
+        <button class="spin-btn" style="margin-top:12px;" data-submit-bet>Einsatz bestaetigen</button>
+        <div class="waiting" style="padding:12px 0 0;">
+          ${myBet ? `Gesetzt: ${myBet.amount} Coins${myBet.targetPlayerId ? ' auf ' + escapeHtml(playerName(state, myBet.targetPlayerId)) : ''}` : 'Noch nicht gesetzt.'}
+        </div>
+      </div>`;
   }
 
   function waiting(big, sub) {
@@ -185,13 +187,13 @@
 
   function renderBuzzer(state) {
     const me = App.me(state);
-    const myTeam = me && me.teamId;
+    const myPlayer = me && me.playerId;
     const buzzer = state.buzzer;
 
-    const myPress = buzzer.presses.find((p) => p.teamId === myTeam);
+    const myPress = buzzer.presses.find((p) => p.playerId === myPlayer);
     const isArmed = buzzer.status === 'armed';
 
-    buzzerBtn.disabled = !(isArmed && myTeam && !myPress);
+    buzzerBtn.disabled = !(isArmed && myPlayer && !myPress);
 
     if (buzzer.status === 'locked') {
       buzzStatus.textContent = 'gesperrt';
@@ -214,23 +216,23 @@
 
   App.onState((state) => {
     const me = App.me(state);
-    const myTeam = me && me.teamId;
-    const team = myTeam && state.teams.find((t) => t.id === myTeam);
+    const myPlayerId = me && me.playerId;
+    const player = myPlayerId && state.players.find((p) => p.id === myPlayerId);
 
-    whoEl.textContent = team ? `${team.name} - Gesamt ${team.score}` : 'Team waehlen';
-    whoEl.style.color = team ? team.color : '';
+    whoEl.textContent = player ? `${player.name} - ${player.score} Coins` : 'Spieler waehlen';
+    whoEl.style.color = player ? player.color : '';
 
-    renderTeams(state);
+    renderPlayers(state);
 
-    if (myTeam) {
-      teamSelect.style.display = 'none';
+    if (myPlayerId) {
+      playerSelect.style.display = 'none';
       playArea.style.display = 'flex';
     } else {
-      teamSelect.style.display = 'block';
+      playerSelect.style.display = 'block';
       playArea.style.display = 'none';
     }
 
-    renderPick(state, myTeam);
+    renderPick(state, myPlayerId);
 
     const gameRunning = state.phase === 'spiel-aktiv' && state.activeGame;
     const usesBuzzer =
@@ -250,10 +252,15 @@
     return value ? `<div style="margin-top:8px;"><b>${label}:</b> ${escapeHtml(value)}</div>` : '';
   }
 
-  function modeLabel(mode) { return mode === 'group' ? 'Gruppenspiel' : 'Einzelspiel'; }
   function categoryLabel(category) {
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
   }
+
+  function playerName(state, playerId) {
+    const player = state.players.find((p) => p.id === playerId);
+    return player ? player.name : '-';
+  }
+
   function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

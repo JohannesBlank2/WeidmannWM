@@ -1,5 +1,5 @@
-/* Demo-Spiel "Buzzer-Test" — Player-Modul (iPad).
- * Der zentrale Buzzer wird bereits von der Player-Ansicht gerendert.
+/* Demo-Spiel "Buzzer-Test" — Handy-Modul.
+ * Der zentrale Buzzer wird bereits von der Handy-Ansicht gerendert.
  * Dieses Modul ergaenzt nur einen kurzen Hinweis ueber dem Buzzer und
  * beweist, dass auch fuer /play modul-spezifischer Inhalt moeglich ist.
  */

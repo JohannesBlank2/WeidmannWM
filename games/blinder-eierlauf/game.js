@@ -13,7 +13,7 @@ module.exports = {
   category: 'sport',
   title: 'Blinder Eierlauf',
   responsiblePerson: 'TBD',
-  description: 'Teamspiel mit Eierlauf und eingeschraenkter Sicht.',
+  description: 'Eierlauf mit eingeschraenkter Sicht.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Loeffel', 'Eier oder Ersatz', 'Augenbinden'],
   hasBeenPlayed: false,

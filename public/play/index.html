@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Weidmann WM — Spieler</title>
+  <title>Weidmann WM — Handy</title>
   <link rel="stylesheet" href="/shared/style.css" />
   <style>
     body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -14,23 +14,42 @@
     header.bar .who { font-weight: 700; }
     main { flex: 1; display: flex; flex-direction: column; padding: 18px; gap: 16px; overflow: auto; }
 
-    /* Team-Auswahl */
-    .team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .team-btn {
-      padding: 26px 10px; font-size: 1.3rem; font-weight: 800; border-radius: 16px;
-      border: 3px solid var(--tc); background: var(--panel); color: var(--text);
+    /* Spieler-Auswahl */
+    .player-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .player-btn {
+      padding: 26px 10px; font-size: 1.3rem; font-weight: 800; border-radius: 8px;
+      border: 3px solid var(--pc); background: var(--panel); color: var(--text);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
     }
-    .team-btn.active { background: var(--tc); color: #111; }
+    .player-btn span { font-size: .85rem; font-weight: 600; color: var(--muted); }
+    .player-btn.active { background: var(--pc); color: #111; }
+    .player-btn.active span { color: rgba(0,0,0,.7); }
 
     /* Pick-Bereich (Kategorie/Spiel-Auswahl + Warten) */
     #pick-area:empty { display: none; }
     .pick-title { text-align: center; font-size: 1.2rem; font-weight: 800; margin-bottom: 12px; }
     .pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .pick-btn {
-      padding: 22px 10px; font-size: 1.15rem; font-weight: 800; border-radius: 14px;
+      padding: 22px 10px; font-size: 1.15rem; font-weight: 800; border-radius: 8px;
       border: 2px solid var(--accent); background: var(--panel); color: var(--text);
     }
     .pick-btn .sub { display: block; font-size: .8rem; font-weight: 500; color: var(--muted); margin-top: 4px; }
+    .pick-sub { text-align: center; color: var(--muted); margin: -4px 0 12px; }
+    .choice-list { display: grid; gap: 10px; margin: 12px 0; }
+    .choice-pill {
+      border: 1px solid var(--line); background: var(--panel); border-radius: 8px;
+      padding: 12px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .choice-pill span { color: var(--muted); font-size: .85rem; }
+    .spin-btn {
+      width: 100%; padding: 24px 12px; font-size: 1.8rem; font-weight: 900;
+      border-color: var(--accent); background: var(--accent); color: #111;
+    }
+    .bet-label { display: block; margin: 14px 0 6px; color: var(--muted); font-weight: 800; }
+    .bet-input {
+      width: 100%; border: 1px solid var(--line); background: #13070a; color: var(--text);
+      border-radius: 8px; padding: 14px; font: inherit; font-weight: 800;
+    }
     .waiting { text-align: center; color: var(--muted); padding: 30px 10px; }
     .waiting .big { font-size: 1.4rem; color: var(--text); margin-bottom: 8px; }
 
@@ -58,13 +77,13 @@
   </header>
 
   <main>
-    <!-- Schritt 1: Team waehlen -->
-    <section id="team-select" class="card">
-      <h2>Welches Team bist du?</h2>
-      <div class="team-grid" id="team-grid"></div>
+    <!-- Schritt 1: Spieler waehlen -->
+    <section id="player-select" class="card">
+      <h2>Wer bist du?</h2>
+      <div class="player-grid" id="player-grid"></div>
     </section>
 
-    <!-- Schritt 2: Spielbereich (Pick / Buzzer / Spiel-Modul) -->
+    <!-- Schritt 2: Spielbereich (Kategorie / Spin / Buzzer / Spiel-Modul) -->
     <section id="play-area" style="display:none; flex:1; flex-direction:column; gap:14px;">
       <div id="pick-area"></div>
       <div id="game-area"></div>

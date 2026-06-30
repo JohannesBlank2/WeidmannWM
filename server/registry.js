@@ -123,6 +123,7 @@ class Registry {
       rules: def.rules || '',
       materials: Array.isArray(def.materials) ? def.materials : [],
       hasBeenPlayed: def.hasBeenPlayed === true,
+      selectable: def.selectable === true,
       interaktionstyp,
       built,
       demo,
@@ -154,6 +155,7 @@ class Registry {
       rules: g.rules,
       materials: g.materials,
       hasBeenPlayed: g.hasBeenPlayed,
+      selectable: g.selectable,
       interaktionstyp: g.interaktionstyp,
       built: g.built,
       demo: g.demo,
@@ -178,6 +180,7 @@ class Registry {
       rules: g.rules,
       materials: g.materials,
       hasBeenPlayed: g.hasBeenPlayed,
+      selectable: g.selectable,
       interaktionstyp: g.interaktionstyp,
       built: g.built,
       folder: g.folder,
@@ -187,6 +190,52 @@ class Registry {
   /** Pool-Spiele (alle ausser dem Demo-Platzhalter). */
   pool() {
     return this.list().filter((g) => !g.demo);
+  }
+
+  /**
+   * Neue Auswahl fuer die Einzelspieler-Show: Kategorie reicht, der alte
+   * single/group-Modus wird nicht mehr gefiltert. Echte Spiele sind selectable,
+   * Decoys bleiben im Rad sichtbar, koennen aber nicht ausgelost werden.
+   */
+  buildSpinChoices(kategorie, consumed = [], options = {}) {
+    const category = normalizeCategory(kategorie);
+    const limit = Number(options.limit) || 3;
+    const includePlayed = options.includePlayed === true;
+    const selectable = this.pool().filter(
+      (g) =>
+        g.category === category &&
+        g.selectable &&
+        (includePlayed || !consumed.includes(g.id))
+    );
+    const decoys = this.pool().filter(
+      (g) =>
+        g.category === category &&
+        !g.selectable &&
+        !selectable.some((candidate) => candidate.id === g.id)
+    );
+    const picked = shuffle(selectable).slice(0, limit);
+    const neededDecoys = Math.max(0, limit - picked.length);
+    const candidates = shuffle([...picked, ...shuffle(decoys).slice(0, neededDecoys)]);
+
+    return candidates
+      .map((g) => ({
+        gameId: g.id,
+        id: g.id,
+        name: g.name,
+        title: g.title,
+        kategorie: g.kategorie,
+        category: g.category,
+        modus: g.modus,
+        mode: g.mode,
+        responsiblePerson: g.responsiblePerson,
+        description: g.description,
+        rules: g.rules,
+        materials: g.materials,
+        interaktionstyp: g.interaktionstyp,
+        built: g.built,
+        selectable: g.selectable,
+        hasBeenPlayed: consumed.includes(g.id),
+      }));
   }
 
   /**
@@ -222,17 +271,32 @@ class Registry {
         materials: g.materials,
         interaktionstyp: g.interaktionstyp,
         built: g.built,
+        selectable: g.selectable,
         hasBeenPlayed: consumed.includes(g.id),
       }));
   }
 
-  /** Kategorien, die fuer den Modus noch >=1 ungespieltes Spiel haben. */
-  availableKategorien(modus, consumed = []) {
-    const mode = normalizeModus(modus)[0];
+  /** Kategorien, die noch >=1 echtes ungespieltes Spiel haben. */
+  availableCategories(consumed = []) {
     return KATEGORIEN.filter((k) =>
-      this.pool().some((g) => g.mode.includes(mode) && g.category === k)
+      this.pool().some((g) => g.category === k && g.selectable && !consumed.includes(g.id))
     );
   }
+
+  /** Rueckwaertskompatibler Alias fuer alten Code. */
+  availableKategorien(modusOrConsumed, consumedMaybe = []) {
+    const consumed = Array.isArray(modusOrConsumed) ? modusOrConsumed : consumedMaybe;
+    return this.availableCategories(consumed);
+  }
+}
+
+function shuffle(items) {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 module.exports = { Registry, KATEGORIEN, INTERAKTIONEN, MODI, DEMO_GAME_ID };

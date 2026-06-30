@@ -9,7 +9,7 @@
  * So legt man ein NEUES Spiel an:
  *   1. Neuen Ordner unter /games/<meine-id>/ erstellen.
  *   2. game.js mit diesem Schema exportieren.
- *   3. Optional display.js / play.js fuer eigene TV-/iPad-Ansichten.
+ *   3. Optional display.js / play.js fuer eigene TV-/Handy-Ansichten.
  *   -> Server beim Naechsten Start neu laden, fertig. Kein Kern-Eingriff.
  */
 module.exports = {
@@ -19,7 +19,7 @@ module.exports = {
   title: 'Buzzer-Test',
   responsiblePerson: 'System',
   description: 'Demo- und Platzhalterspiel fuer noch nicht gebaute Spiele.',
-  rules: 'Admin gibt den Buzzer frei. Das zuerst buzzernde Team wird erfasst.',
+  rules: 'Admin gibt den Buzzer frei. Der zuerst buzzernde Spieler wird erfasst.',
   materials: [],
   hasBeenPlayed: false,
   interaktionstyp: 'buzzer',
