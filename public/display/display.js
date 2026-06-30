@@ -61,7 +61,7 @@
   }
 
   function renderStage(state) {
-    joinQrEl.style.display = state.phase === 'lobby' ? 'block' : 'none';
+    joinQrEl.style.display = 'none';
 
     const r = state.round || {};
     const picker = r.pickerPlayerId && state.players.find((p) => p.id === r.pickerPlayerId);
@@ -69,11 +69,18 @@
       ? `<span style="color:${picker.color}">${escapeHtml(picker.name)}</span>`
       : '-';
 
-    if (state.phase === 'runden-uebersicht') {
-      contentEl.innerHTML = idle(
-        `Runde ${r.number} / ${r.total}`,
-        `${pickerHtml} waehlt die Kategorie`
-      );
+    if (state.phase === 'lobby') {
+      contentEl.innerHTML = tableScene(state, {
+        eyebrow: 'WEIDMANN CASINO',
+        title: 'Lobby',
+        status: 'Spieler treten per Handy bei',
+      });
+    } else if (state.phase === 'runden-uebersicht') {
+      contentEl.innerHTML = tableScene(state, {
+        eyebrow: 'Naechstes Spiel',
+        title: `Runde ${r.number}`,
+        status: `${stripTags(pickerHtml)} waehlt die Kategorie`,
+      });
     } else if (state.phase === 'kategorie-auswahl') {
       const cats = (r.availableCategories || []).map(categoryLabel).join(' &nbsp; ');
       contentEl.innerHTML = idle(
@@ -93,8 +100,53 @@
     } else if (state.phase === 'finale') {
       contentEl.innerHTML = finale(state);
     } else {
-      contentEl.innerHTML = idle('Willkommen', 'Spieler scannen den QR-Code und treten per Handy bei.');
+      contentEl.innerHTML = tableScene(state, {
+        eyebrow: 'WEIDMANN CASINO',
+        title: 'Lobby',
+        status: 'Spieler treten per Handy bei',
+      });
     }
+  }
+
+  function tableScene(state, copy) {
+    const connected = connectedPlayerIds(state);
+    return `
+      <div class="table-scene">
+        <div class="table-title">
+          <div class="table-brand">♠ ${escapeHtml(copy.eyebrow)} ♠</div>
+        </div>
+        <div class="poker-table">
+          <div class="table-center">
+            <div class="table-kicker">Casino Runde</div>
+            <div class="table-main">${escapeHtml(copy.title)}</div>
+            <div class="table-status">
+              <span class="status-dot"></span>${escapeHtml(copy.status)}
+            </div>
+          </div>
+        </div>
+        ${state.players.map((player, index) => playerSeat(player, index, connected.has(player.id))).join('')}
+      </div>`;
+  }
+
+  function playerSeat(player, index, connected) {
+    return `
+      <div class="table-seat seat-${index}">
+        <div class="seat-avatar ${connected ? 'connected' : ''}" style="--pc:${player.color}">
+          ${player.avatar
+            ? `<img src="${escapeHtml(player.avatar)}" alt="${escapeHtml(player.name)}" />`
+            : initials(player.name)}
+        </div>
+        <div class="seat-name">${escapeHtml(player.name)}</div>
+        <div class="coin-pill"><span></span>${formatCoins(player.score)}</div>
+      </div>`;
+  }
+
+  function connectedPlayerIds(state) {
+    return new Set(
+      Object.values(state.clients || {})
+        .filter((client) => client.connected && client.playerId)
+        .map((client) => client.playerId)
+    );
   }
 
   function renderSpin(state, spinning) {
@@ -279,6 +331,10 @@
 
   App.onState((state) => {
     phaseEl.textContent = state.phase;
+    document.body.classList.toggle(
+      'table-mode',
+      state.phase === 'lobby' || state.phase === 'runden-uebersicht'
+    );
     renderScoreboard(state);
 
     if (state.activeGame) {
@@ -322,6 +378,24 @@
 
   function detailRow(label, value) {
     return value ? `<div style="margin-top:10px;"><b>${label}:</b> ${escapeHtml(value)}</div>` : '';
+  }
+
+  function initials(name) {
+    return String(name || '?')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase();
+  }
+
+  function formatCoins(value) {
+    return String(Number(value) || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  function stripTags(value) {
+    return String(value || '').replace(/<[^>]+>/g, '');
   }
 
   function categoryLabel(category) {

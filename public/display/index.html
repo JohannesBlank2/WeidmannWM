@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="/shared/style.css" />
   <style>
     body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    body.table-mode header.bar,
+    body.table-mode footer.scores { display: none; }
+    body.table-mode main.stage { min-height: 100vh; padding: 18px; }
     header.bar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 14px 28px; border-bottom: 1px solid var(--line);
@@ -45,6 +48,96 @@
     }
     .choice-card .cn { font-size: 1.8rem; font-weight: 800; }
     .choice-card .cm { color: var(--muted); margin-top: 8px; font-size: 1.1rem; }
+
+    /* Lobby / Rundentisch */
+    .table-scene {
+      position: relative; width: min(1540px, 96vw); height: min(860px, 94vh);
+      margin: 0 auto;
+    }
+    .table-title {
+      position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+      z-index: 3; text-align: center; pointer-events: none;
+    }
+    .table-brand {
+      color: var(--accent); font-size: clamp(1.6rem, 3vw, 2.8rem);
+      font-weight: 900; letter-spacing: .18em;
+      text-shadow: 0 0 18px rgba(255,209,92,.42);
+      white-space: nowrap;
+    }
+    .poker-table {
+      position: absolute; left: 50%; top: 53%; transform: translate(-50%, -50%);
+      width: min(1120px, 74vw); height: min(540px, 58vh);
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 53% 45%, rgba(67, 158, 105, .35), transparent 0 22%, transparent 42%),
+        radial-gradient(ellipse at center, #155f43 0%, #0f4a36 56%, #092b22 100%);
+      border: 14px solid #d8b350;
+      box-shadow:
+        0 0 0 7px rgba(56, 33, 6, .78),
+        inset 0 0 0 7px rgba(5, 22, 17, .75),
+        inset 0 26px 70px rgba(255,255,255,.08),
+        0 26px 56px rgba(0,0,0,.48);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .table-center { text-align: center; padding: 20px; }
+    .table-kicker {
+      color: var(--accent); text-transform: uppercase; letter-spacing: .32em;
+      font-size: 1rem; font-weight: 900; margin-bottom: 10px;
+    }
+    .table-main {
+      color: #fff8df; font-family: Georgia, 'Times New Roman', serif;
+      font-size: clamp(3rem, 6vw, 5.4rem); font-weight: 900;
+      text-shadow: 0 4px 18px rgba(0,0,0,.5);
+    }
+    .table-status {
+      display: inline-flex; align-items: center; gap: 9px; margin-top: 14px;
+      padding: 9px 18px; border-radius: 999px;
+      background: rgba(5, 31, 22, .78); border: 1px solid rgba(255,209,92,.28);
+      color: #fff3bf; font-size: 1.05rem; font-weight: 800;
+    }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: #47d784;
+      box-shadow: 0 0 13px rgba(71,215,132,.8);
+    }
+    .table-seat {
+      position: absolute; z-index: 4; min-width: 155px;
+      display: flex; flex-direction: column; align-items: center; gap: 7px;
+      text-align: center;
+    }
+    .seat-0 { left: 20%; top: 4%; }
+    .seat-1 { right: 20%; top: 4%; }
+    .seat-2 { left: 1%; top: 48%; transform: translateY(-50%); }
+    .seat-3 { right: 1%; top: 48%; transform: translateY(-50%); }
+    .seat-4 { left: 50%; bottom: 1%; transform: translateX(-50%); }
+    .seat-avatar {
+      width: 118px; height: 118px; border-radius: 50%;
+      display: grid; place-items: center;
+      border: 7px solid #d8b350; background: linear-gradient(180deg, var(--pc), #16080c);
+      color: #fff8df; font-size: 1.9rem; font-weight: 900;
+      overflow: hidden;
+      box-shadow: 0 14px 34px rgba(0,0,0,.42), inset 0 0 0 3px rgba(0,0,0,.2);
+    }
+    .seat-avatar img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .seat-avatar.connected { box-shadow: 0 14px 34px rgba(0,0,0,.42), 0 0 0 4px rgba(71,215,132,.5); }
+    .seat-name {
+      color: #fff8df; font-family: Georgia, 'Times New Roman', serif;
+      font-size: 1.55rem; font-weight: 900; text-shadow: 0 3px 12px rgba(0,0,0,.65);
+      max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .coin-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      min-height: 38px; padding: 5px 14px; border-radius: 999px;
+      background: rgba(9, 18, 13, .88); border: 1px solid #b58a27;
+      color: #fff1ae; font-size: 1.4rem; font-weight: 900;
+      box-shadow: inset 0 0 0 1px rgba(255,209,92,.12), 0 8px 20px rgba(0,0,0,.32);
+    }
+    .coin-pill span {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff7bd, #d8a527 70%);
+      box-shadow: 0 0 8px rgba(255,209,92,.48);
+    }
 
     /* Kategorie-Spin: Slot Machine */
     .slot-wrap { width: min(1120px, 96vw); text-align: center; }
@@ -110,6 +203,15 @@
     @keyframes reel-spin {
       from { transform: translateY(0); }
       to { transform: translateY(calc(-1 * var(--reel-shift, 0px))); }
+    }
+
+    @media (max-width: 900px) {
+      .table-scene { height: min(600px, 74vh); }
+      .poker-table { width: min(650px, 74vw); height: min(320px, 42vh); border-width: 10px; }
+      .table-seat { min-width: 120px; }
+      .seat-avatar { width: 70px; height: 70px; font-size: 1.4rem; border-width: 5px; }
+      .seat-name { font-size: 1.15rem; max-width: 130px; }
+      .coin-pill { font-size: 1.05rem; min-height: 32px; }
     }
 
     footer.scores {

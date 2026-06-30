@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const STATE_FILE = path.join(__dirname, '..', 'state.json');
-const STATE_SCHEMA_VERSION = 3;
+const STATE_SCHEMA_VERSION = 4;
 
 // Phasen der Show-Statemaschine.
 //   lobby              -> Spieler verbinden sich
@@ -32,7 +32,13 @@ const PHASES = [
 
 const BUZZER = { LOCKED: 'locked', ARMED: 'armed', RESOLVED: 'resolved' };
 
-const PLAYER_COLORS = ['#e63946', '#2a9d8f', '#f4a261', '#4361ee', '#9b5de5'];
+const PLAYER_PRESETS = [
+  { name: 'Stephan', color: '#e63946', avatar: '/assets/avatars/Stephan.png' },
+  { name: 'Sophie', color: '#2a9d8f', avatar: '/assets/avatars/Sophie.png' },
+  { name: 'Danny', color: '#ffd166', avatar: '/assets/avatars/Danny.png' },
+  { name: 'Flo', color: '#4361ee', avatar: '/assets/avatars/Flo.png' },
+  { name: 'Maleen', color: '#9b5de5', avatar: '/assets/avatars/Maleen.png' },
+];
 const PLAYER_COUNT = 5;
 const TOTAL_ROUNDS = 5;
 const SPIN_DURATION_MS = 4600;
@@ -49,10 +55,11 @@ const RANK_AWARDS = {
 function defaultPlayers() {
   return Array.from({ length: PLAYER_COUNT }, (_, i) => ({
     id: `player${i + 1}`,
-    name: `Spieler ${i + 1}`,
+    name: PLAYER_PRESETS[i].name,
     score: STARTING_COINS,
     gameScore: 0,
-    color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+    color: PLAYER_PRESETS[i].color,
+    avatar: PLAYER_PRESETS[i].avatar,
   }));
 }
 
@@ -694,6 +701,7 @@ function normalizePlayers(players) {
       score: Number.isFinite(Number(saved.score)) ? Number(saved.score) : STARTING_COINS,
       gameScore: Number(saved.gameScore) || 0,
       color: saved.color || def.color,
+      avatar: saved.avatar || def.avatar,
     };
   });
 }
