@@ -6,22 +6,34 @@
   const buzzStateEl = document.getElementById('buzz-state');
   const buzzOrderEl = document.getElementById('buzz-order');
   const playersEl = document.getElementById('players') || document.getElementById('teams');
+  const featuredGamesEl = document.getElementById('featured-games');
   const gamesEl = document.getElementById('games');
   const activeGameEl = document.getElementById('active-game');
   const clientsEl = document.getElementById('clients');
 
+  const DEFAULT_FEATURED_GAMES = [
+    { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', animation: 'slot' },
+    { slot: 2, gameId: 'fehlersuche', title: '2016?', animation: 'roulette' },
+    { slot: 3, gameId: 'cornhole', title: 'Cornhole', animation: 'cards' },
+    { slot: 4, gameId: 'musik-erraten', title: 'Shazam', animation: 'reveal' },
+    { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', animation: 'reveal' },
+  ];
+
   let games = [];
+  let featuredGames = DEFAULT_FEATURED_GAMES;
 
   App.socket.on('hello', (info) => {
     games = info.games || [];
+    featuredGames = Array.isArray(info.featuredGames) && info.featuredGames.length
+      ? info.featuredGames
+      : DEFAULT_FEATURED_GAMES;
     if (App.getState()) renderGames(App.getState());
+    if (App.getState()) renderFeaturedGames(App.getState());
   });
 
   const FLOW = {
-    'show-start': 'admin:show-start',
-    'open-kategorie': 'admin:open-kategorie',
+    'show-lobby': 'admin:show-lobby',
     'stop-game': 'admin:stop-game',
-    'next-round': 'admin:next-round',
     'goto-finale': 'admin:goto-finale',
     'reset-game-points': 'admin:reset-game-points',
   };
@@ -38,8 +50,14 @@
     const r = state.round || {};
     const picker = r.pickerPlayerId && state.players.find((p) => p.id === r.pickerPlayerId);
 
-    if (r.number < 1) {
+    if (state.phase === 'lobby') {
+      roundBanner.innerHTML = '<span class="muted">Lobby / Tisch wird angezeigt.</span>';
+    } else if (r.number < 1) {
       roundBanner.innerHTML = '<span class="muted">Show noch nicht gestartet.</span>';
+    } else if (r.selectedGame) {
+      roundBanner.innerHTML =
+        `Spiel <b>${r.number}/${r.total}</b>` +
+        ` &middot; <b>${esc(r.selectedGame.title || r.selectedGame.name)}</b>`;
     } else {
       roundBanner.innerHTML =
         `Runde <b>${r.number}/${r.total}</b>` +
@@ -54,6 +72,8 @@
       renderSpinReady(r);
     } else if (state.phase === 'spin-laeuft') {
       renderSpinRunning(r);
+    } else if (state.phase === 'spiel-intro') {
+      renderFeaturedIntro(r);
     } else if (state.phase === 'spiel-details') {
       renderGameDetails(r);
     } else if (state.phase === 'wetten') {
@@ -63,6 +83,21 @@
     } else {
       pickerArea.innerHTML = '';
     }
+  }
+
+  function renderFeaturedIntro(round) {
+    const game = round.selectedGame;
+    pickerArea.innerHTML =
+      '<div class="lbl">Spiel wird vorgestellt:</div>' +
+      `<div class="game-detail">
+        <h3>${esc(game ? game.title || game.name : 'Show-Spiel')}</h3>
+        <div class="muted">${introLabel(round.intro)} laeuft auf dem TV.</div>
+      </div>` +
+      '<div class="row" style="margin-top:10px;">' +
+      '<button data-finish-featured-intro>Animation ueberspringen</button>' +
+      '</div>';
+    pickerArea.querySelector('[data-finish-featured-intro]').onclick = () =>
+      App.socket.emit('admin:finish-featured-intro');
   }
 
   function renderCategoryPick(round) {
@@ -286,6 +321,30 @@
     });
   }
 
+  function renderFeaturedGames(state) {
+    const currentGameId = state.round && state.round.gameId;
+    const introRunning = state.phase === 'spiel-intro';
+    featuredGamesEl.innerHTML =
+      '<div class="lbl">Feste Show-Spiele:</div>' +
+      featuredGames
+        .map((game) => {
+          const isCurrent = currentGameId === game.gameId &&
+            ['spiel-intro', 'wetten', 'spiel-aktiv', 'auswertung'].includes(state.phase);
+          return `
+            <button class="featured-game-btn ${isCurrent ? 'primary' : ''}" data-featured-slot="${game.slot}">
+              <span>Spiel ${game.slot}: ${esc(game.title)}</span>
+              <span class="meta">${animationLabel(game.animation)}</span>
+            </button>`;
+        })
+        .join('');
+
+    featuredGamesEl.querySelectorAll('[data-featured-slot]').forEach((btn) => {
+      btn.disabled = introRunning;
+      btn.onclick = () =>
+        App.socket.emit('admin:start-featured-game', { slot: Number(btn.dataset.featuredSlot) });
+    });
+  }
+
   document.getElementById('reset-all').onclick = () => {
     if (confirm('Wirklich ALLE Coins und den Ablauf zuruecksetzen? (Spielernamen bleiben)')) {
       App.socket.emit('admin:reset-all');
@@ -322,6 +381,7 @@
     renderAblauf(state);
     renderBuzzer(state);
     renderPlayers(state);
+    renderFeaturedGames(state);
     renderGames(state);
     renderClients(state);
   });
@@ -345,6 +405,20 @@
 
   function categoryLabel(category) {
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
+  }
+
+  function introLabel(intro) {
+    if (!intro) return 'Animation';
+    if (intro.animation === 'roulette') return 'Roulette';
+    if (intro.animation === 'cards') return 'Poker-Karten';
+    return intro.animation === 'slot' ? 'Einarmiger Bandit' : 'Spiel-Reveal';
+  }
+
+  function animationLabel(animation) {
+    if (animation === 'slot') return 'Einarmiger Bandit';
+    if (animation === 'roulette') return 'Roulette';
+    if (animation === 'cards') return 'Poker-Karten';
+    return 'Reveal';
   }
 
   function placeAward(place) {

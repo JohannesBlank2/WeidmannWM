@@ -9,9 +9,10 @@ const STATE_SCHEMA_VERSION = 4;
 // Phasen der Show-Statemaschine.
 //   lobby              -> Spieler verbinden sich
 //   runden-uebersicht  -> Runde X wird angekuendigt
-//   kategorie-auswahl  -> aktueller Spieler waehlt Sport/Skill/Quiz
-//   spin-bereit        -> drei geloste Spiele stehen bereit, Spieler darf spinnen
-//   spin-laeuft        -> TV zeigt den Gluecksrad-/Slot-Spin
+//   kategorie-auswahl  -> alter Fallback: aktueller Spieler waehlt Sport/Skill/Quiz
+//   spin-bereit        -> alter Fallback: drei geloste Spiele stehen bereit
+//   spin-laeuft        -> alter Fallback: TV zeigt den Gluecksrad-/Slot-Spin
+//   spiel-intro        -> Admin hat eines der festen Show-Spiele vorgestellt
 //   spiel-details      -> ausgelostes Spiel wird angezeigt
 //   wetten             -> Spieler setzen geheim 0..50 Coins auf einen Mitspieler
 //   spiel-aktiv        -> Spiel laeuft
@@ -23,6 +24,7 @@ const PHASES = [
   'kategorie-auswahl',
   'spin-bereit',
   'spin-laeuft',
+  'spiel-intro',
   'spiel-details',
   'wetten',
   'spiel-aktiv',
@@ -44,6 +46,13 @@ const TOTAL_ROUNDS = 5;
 const SPIN_DURATION_MS = 4600;
 const STARTING_COINS = 50;
 const MAX_BET = 50;
+const FEATURED_GAMES = [
+  { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', animation: 'slot', durationMs: 6200 },
+  { slot: 2, gameId: 'fehlersuche', title: '2016?', animation: 'roulette', durationMs: 4600 },
+  { slot: 3, gameId: 'cornhole', title: 'Cornhole', animation: 'cards', durationMs: 4300 },
+  { slot: 4, gameId: 'musik-erraten', title: 'Shazam', animation: 'reveal', durationMs: 2200 },
+  { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', animation: 'reveal', durationMs: 2200 },
+];
 const RANK_AWARDS = {
   1: 50,
   2: 40,
@@ -88,6 +97,7 @@ function defaultRound() {
     gameId: null,
     selectedGame: null,
     spin: defaultSpin(),
+    intro: null,
     // bets: { [playerId]: { playerId, targetPlayerId, amount, submittedAt } }
     bets: {},
     // placements: { [playerId]: 1..5 }
@@ -130,6 +140,9 @@ class GameState {
 
   setRegistry(registry) {
     this.registry = registry;
+    if (this._repairRouletteChoices()) {
+      this.saveNow();
+    }
   }
 
   setOnChange(fn) {
@@ -172,6 +185,8 @@ class GameState {
 
       if (this.state.phase === 'spin-laeuft') {
         this._restoreSpinAfterLoad();
+      } else if (this.state.phase === 'spiel-intro') {
+        this._restoreIntroAfterLoad();
       }
 
       console.log('[state] state.json geladen.');
@@ -192,6 +207,19 @@ class GameState {
     const elapsed = Date.now() - Number(spin.startedAt || 0);
     const remaining = Math.max(0, Number(spin.durationMs || SPIN_DURATION_MS) - elapsed);
     this._scheduleSpinFinish(remaining);
+  }
+
+  _restoreIntroAfterLoad() {
+    const intro = this.state.round.intro || null;
+    if (!intro || !this.state.round.gameId) {
+      this.state.phase = 'lobby';
+      this.state.round.intro = null;
+      return;
+    }
+
+    const elapsed = Date.now() - Number(intro.startedAt || 0);
+    const remaining = Math.max(0, Number(intro.durationMs || 2200) - elapsed);
+    this._scheduleIntroFinish(remaining);
   }
 
   touch() {
@@ -221,6 +249,55 @@ class GameState {
     if (!PHASES.includes(phase)) return;
     this.state.phase = phase;
     this.touch();
+  }
+
+  showLobby() {
+    this._clearSpinTimer();
+    this.clearActiveGame(false);
+    this.state.buzzer = { status: BUZZER.LOCKED, presses: [] };
+    this.state.phase = 'lobby';
+    this.touch();
+  }
+
+  featuredGames() {
+    return FEATURED_GAMES.map((entry) => {
+      const meta = this.registry && this.registry.meta(entry.gameId);
+      return {
+        slot: entry.slot,
+        gameId: entry.gameId,
+        title: meta ? meta.title : entry.title,
+        animation: entry.animation,
+      };
+    });
+  }
+
+  _rouletteChoices() {
+    if (!this.registry) return [];
+    return this.registry
+      .pool()
+      .filter(Boolean)
+      .map((meta) => ({
+        ...meta,
+        gameId: meta.id,
+        selectable: true,
+        hasBeenPlayed: this.state.consumedGames.includes(meta.id),
+      }));
+  }
+
+  _repairRouletteChoices() {
+    const intro = this.state.round && this.state.round.intro;
+    if (!intro || intro.animation !== 'roulette') return false;
+    const choices = this._rouletteChoices();
+    if (!choices.length) return false;
+    const currentIds = new Set((this.state.round.choices || []).map((choice) => choice.gameId || choice.id));
+    const nextIds = new Set(choices.map((choice) => choice.gameId || choice.id));
+    const needsRepair =
+      choices.length !== (this.state.round.choices || []).length ||
+      choices.some((choice) => !currentIds.has(choice.gameId || choice.id)) ||
+      (this.state.round.choices || []).some((choice) => !nextIds.has(choice.gameId || choice.id));
+    if (!needsRepair) return false;
+    this.state.round.choices = choices;
+    return true;
   }
 
   // ---- Spieler & Punkte ----------------------------------------------------
@@ -551,6 +628,55 @@ class GameState {
     return true;
   }
 
+  startFeaturedGame(slot) {
+    if (!this.registry) return false;
+    const featured = FEATURED_GAMES.find((entry) => entry.slot === Number(slot));
+    if (!featured) return false;
+    const game = this.registry.meta(featured.gameId);
+    if (!game) return false;
+
+    const choices = featured.animation === 'roulette'
+      ? this._rouletteChoices()
+      : FEATURED_GAMES
+          .map((entry) => this.registry.meta(entry.gameId))
+          .filter(Boolean)
+          .map((meta) => ({
+            ...meta,
+            gameId: meta.id,
+            selectable: true,
+            hasBeenPlayed: this.state.consumedGames.includes(meta.id),
+          }));
+
+    this._clearSpinTimer();
+    this.clearActiveGame(false);
+    this.state.buzzer = { status: BUZZER.LOCKED, presses: [] };
+    this.state.players.forEach((p) => {
+      p.gameScore = 0;
+    });
+    this.state.round = {
+      ...defaultRound(),
+      number: featured.slot,
+      index: featured.slot - 1,
+      pickerPlayerId: null,
+      category: game.category,
+      kategorie: categoryToGerman(game.category),
+      choices,
+      gameId: game.id,
+      selectedGame: game,
+      intro: {
+        status: 'running',
+        animation: featured.animation,
+        startedAt: Date.now(),
+        durationMs: featured.durationMs,
+        targetGameId: game.id,
+      },
+    };
+    this.state.phase = 'spiel-intro';
+    this.touch();
+    this._scheduleIntroFinish(featured.durationMs);
+    return true;
+  }
+
   finishSpin() {
     if (this.state.phase !== 'spin-laeuft') return false;
     const spin = this.state.round.spin || defaultSpin();
@@ -568,6 +694,19 @@ class GameState {
     this.state.round.placements = {};
     this.state.round.payoutApplied = false;
     this.state.round.payoutSummary = [];
+    this.state.phase = 'wetten';
+    this.touch();
+    return true;
+  }
+
+  finishFeaturedIntro() {
+    if (this.state.phase !== 'spiel-intro') return false;
+    if (!this.state.round.gameId || !this.state.round.selectedGame) return false;
+    this._clearSpinTimer();
+    this.state.round.intro = {
+      ...(this.state.round.intro || {}),
+      status: 'done',
+    };
     this.state.phase = 'wetten';
     this.touch();
     return true;
@@ -679,6 +818,14 @@ class GameState {
     this._spinTimer = setTimeout(() => {
       this._spinTimer = null;
       this.finishSpin();
+    }, Math.max(0, delayMs));
+  }
+
+  _scheduleIntroFinish(delayMs) {
+    this._clearSpinTimer();
+    this._spinTimer = setTimeout(() => {
+      this._spinTimer = null;
+      this.finishFeaturedIntro();
     }, Math.max(0, delayMs));
   }
 
@@ -862,5 +1009,6 @@ module.exports = {
   SPIN_DURATION_MS,
   STARTING_COINS,
   MAX_BET,
+  FEATURED_GAMES,
   RANK_AWARDS,
 };

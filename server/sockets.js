@@ -68,7 +68,11 @@ function attachSockets(io, gameState, registry) {
       });
 
       emitState(socket);
-      socket.emit('hello', { clientId: cid, games: registry.list() });
+      socket.emit('hello', {
+        clientId: cid,
+        games: registry.list(),
+        featuredGames: gameState.featuredGames(),
+      });
     });
 
     // ---- Spieler beitreten -------------------------------------------------
@@ -159,10 +163,22 @@ function attachSockets(io, gameState, registry) {
       gameState.clearPlacement(playerId));
     socket.on('admin:apply-payouts', () => gameState.applyPayouts());
 
+    socket.on('admin:show-lobby', () => {
+      runActiveGameHook('onStop');
+      gameState.showLobby();
+    });
+
     socket.on('admin:show-start', () => gameState.startShow());
     socket.on('admin:open-kategorie', () => gameState.openKategorieAuswahl());
     socket.on('admin:next-round', () => gameState.nextRound());
     socket.on('admin:goto-finale', () => gameState.gotoFinale());
+
+    socket.on('admin:start-featured-game', ({ slot } = {}) => {
+      runActiveGameHook('onStop');
+      gameState.startFeaturedGame(slot);
+    });
+
+    socket.on('admin:finish-featured-intro', () => gameState.finishFeaturedIntro());
 
     socket.on('admin:pick-kategorie', ({ kategorie } = {}) =>
       gameState.chooseKategorie(null, kategorie, true));

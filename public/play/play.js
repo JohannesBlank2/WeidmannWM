@@ -1,4 +1,4 @@
-/* Handy-Ansicht: Spieler waehlen, Kategorie aussuchen, Spin ausloesen, Spielcontent sehen. */
+/* Handy-Ansicht: Spieler waehlen, Einsaetze/Buzzer nutzen, Spielcontent sehen. */
 (function () {
   const whoEl = document.getElementById('who');
   const playerSelect = document.getElementById('player-select');
@@ -45,43 +45,21 @@
     if (state.phase === 'runden-uebersicht') {
       pickArea.innerHTML = waiting(
         `Runde ${r.number}/${r.total}`,
-        `${escapeHtml(pickerName)} waehlt gleich eine Kategorie.`
+        'Admin stellt gleich das naechste Spiel vor.'
       );
       return;
     }
 
     if (state.phase === 'kategorie-auswahl') {
-      if (isPicker) {
-        const categories = r.availableCategories || [];
-        pickArea.innerHTML =
-          `<div class="pick-title">Du bist dran: Runde ${r.number}/${r.total}</div>` +
-          '<div class="pick-sub">Kategorie waehlen</div>' +
-          '<div class="pick-grid">' +
-          categories.map((k) => `<button class="pick-btn" data-kat="${k}">${categoryLabel(k)}</button>`).join('') +
-          '</div>';
-        pickArea.querySelectorAll('[data-kat]').forEach((b) => {
-          b.onclick = () => App.socket.emit('pick:kategorie', { kategorie: b.dataset.kat });
-        });
-      } else {
-        pickArea.innerHTML = waiting(`${escapeHtml(pickerName)} waehlt eine Kategorie ...`, '');
-      }
+      pickArea.innerHTML = waiting('Spielauswahl', 'Admin waehlt das naechste Show-Spiel.');
       return;
     }
 
     if (state.phase === 'spin-bereit') {
       const choices = (r.choices || []).map(gameButton).join('');
-      if (isPicker) {
-        pickArea.innerHTML =
-          `<div class="pick-title">${categoryLabel(r.category)} ist gesetzt</div>` +
-          '<div class="pick-sub">Auf dem TV stehen diese Spiele im Spin.</div>' +
-          `<div class="choice-list">${choices}</div>` +
-          '<button class="spin-btn" data-spin>SPIN</button>';
-        pickArea.querySelector('[data-spin]').onclick = () => App.socket.emit('pick:spin');
-      } else {
-        pickArea.innerHTML =
-          waiting(`${escapeHtml(pickerName)} darf jetzt spinnen.`, '') +
-          `<div class="choice-list">${choices}</div>`;
-      }
+      pickArea.innerHTML =
+        waiting('Spielauswahl', 'Admin startet die Vorstellung auf dem TV.') +
+        `<div class="choice-list">${choices}</div>`;
       return;
     }
 
@@ -89,6 +67,13 @@
       pickArea.innerHTML =
         waiting('Spin laeuft auf dem TV ...', 'Das Spiel wird gerade ausgelost.') +
         spinChoiceList(r);
+      return;
+    }
+
+    if (state.phase === 'spiel-intro') {
+      pickArea.innerHTML =
+        waiting('Spiel wird vorgestellt ...', 'Schau auf den TV.') +
+        gameDetails(r.selectedGame);
       return;
     }
 

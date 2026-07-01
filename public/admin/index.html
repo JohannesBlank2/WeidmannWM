@@ -42,6 +42,13 @@
     .game-item .info .nm { font-weight: 700; }
     .game-item .info .mt { color: var(--muted); font-size: .85rem; }
     .bigbtn { flex: 1; padding: 16px; font-size: 1.05rem; font-weight: 700; }
+    .featured-games { display: grid; gap: 8px; margin-top: 12px; }
+    .featured-game-btn {
+      width: 100%; text-align: left; display: flex; justify-content: space-between;
+      align-items: center; gap: 12px; padding: 14px 16px; font-weight: 800;
+    }
+    .featured-game-btn .meta { color: var(--muted); font-size: .8rem; font-weight: 700; }
+    .featured-game-btn.primary .meta { color: rgba(36,17,4,.68); }
     .spin-admin-list { display: grid; gap: 8px; margin-top: 8px; }
     .game-detail.mini { padding: 10px 12px; }
   </style>
@@ -60,12 +67,11 @@
     <h2>Ablauf</h2>
     <div class="round-banner" id="round-banner"></div>
     <div class="flow row">
-      <button class="good" data-flow="show-start">▶ Show / Runde 1 starten</button>
-      <button data-flow="open-kategorie">📂 Kategorie-Auswahl öffnen</button>
+      <button data-flow="show-lobby">🎲 Tisch / Lobby anzeigen</button>
       <button class="bad" data-flow="stop-game">⏹ Spiel beenden → Auswertung</button>
-      <button class="primary" data-flow="next-round">⏭ Nächste Runde</button>
       <button data-flow="goto-finale">→ Finale</button>
     </div>
+    <div class="featured-games" id="featured-games"></div>
     <div class="pickrow" id="picker-area"></div>
   </section>
 
