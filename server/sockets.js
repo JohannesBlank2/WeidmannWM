@@ -173,11 +173,12 @@ function attachSockets(io, gameState, registry) {
     socket.on('admin:next-round', () => gameState.nextRound());
     socket.on('admin:goto-finale', () => gameState.gotoFinale());
 
-    socket.on('admin:start-featured-game', ({ slot } = {}) => {
+    socket.on('admin:prepare-featured-game', ({ slot } = {}) => {
       runActiveGameHook('onStop');
-      gameState.startFeaturedGame(slot);
+      gameState.prepareFeaturedGame(slot);
     });
 
+    socket.on('admin:start-featured-intro', () => gameState.startFeaturedIntro());
     socket.on('admin:finish-featured-intro', () => gameState.finishFeaturedIntro());
 
     socket.on('admin:pick-kategorie', ({ kategorie } = {}) =>

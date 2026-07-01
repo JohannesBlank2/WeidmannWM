@@ -50,7 +50,7 @@ const FEATURED_GAMES = [
   { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', animation: 'slot', durationMs: 6200 },
   { slot: 2, gameId: 'fehlersuche', title: '2016?', animation: 'roulette', durationMs: 4600 },
   { slot: 3, gameId: 'cornhole', title: 'Cornhole', animation: 'cards', durationMs: 4300 },
-  { slot: 4, gameId: 'musik-erraten', title: 'Shazam', animation: 'reveal', durationMs: 2200 },
+  { slot: 4, gameId: 'musik-erraten', title: 'Shazam', animation: 'wheel', durationMs: 5200 },
   { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', animation: 'reveal', durationMs: 2200 },
 ];
 const RANK_AWARDS = {
@@ -216,10 +216,9 @@ class GameState {
       this.state.round.intro = null;
       return;
     }
-
-    const elapsed = Date.now() - Number(intro.startedAt || 0);
-    const remaining = Math.max(0, Number(intro.durationMs || 2200) - elapsed);
-    this._scheduleIntroFinish(remaining);
+    // Der Intro-Ablauf ist rein admin-gesteuert (kein Auto-Timer mehr) -
+    // nach einem Neustart bleibt die Animation einfach in ihrem Status stehen,
+    // bis der Admin per finishFeaturedIntro() weiterschaltet.
   }
 
   touch() {
@@ -271,23 +270,25 @@ class GameState {
     });
   }
 
-  _rouletteChoices() {
+  _gamePoolChoices() {
     if (!this.registry) return [];
-    return this.registry
-      .pool()
-      .filter(Boolean)
-      .map((meta) => ({
-        ...meta,
-        gameId: meta.id,
-        selectable: true,
-        hasBeenPlayed: this.state.consumedGames.includes(meta.id),
-      }));
+    return shuffle(
+      this.registry
+        .pool()
+        .filter(Boolean)
+        .map((meta) => ({
+          ...meta,
+          gameId: meta.id,
+          selectable: true,
+          hasBeenPlayed: this.state.consumedGames.includes(meta.id),
+        }))
+    );
   }
 
   _repairRouletteChoices() {
     const intro = this.state.round && this.state.round.intro;
-    if (!intro || intro.animation !== 'roulette') return false;
-    const choices = this._rouletteChoices();
+    if (!intro) return false;
+    const choices = this._gamePoolChoices();
     if (!choices.length) return false;
     const currentIds = new Set((this.state.round.choices || []).map((choice) => choice.gameId || choice.id));
     const nextIds = new Set(choices.map((choice) => choice.gameId || choice.id));
@@ -628,24 +629,22 @@ class GameState {
     return true;
   }
 
-  startFeaturedGame(slot) {
+  /**
+   * Schritt 1: Show-Spiel fuer einen Slot vormerken. Die TV-Ansicht zeigt nur
+   * einen neutralen "Bereit"-Screen, das eigentliche Spiel bleibt verdeckt, bis
+   * der Admin die Animation explizit startet (startFeaturedIntro).
+   */
+  prepareFeaturedGame(slot) {
     if (!this.registry) return false;
     const featured = FEATURED_GAMES.find((entry) => entry.slot === Number(slot));
     if (!featured) return false;
     const game = this.registry.meta(featured.gameId);
     if (!game) return false;
 
-    const choices = featured.animation === 'roulette'
-      ? this._rouletteChoices()
-      : FEATURED_GAMES
-          .map((entry) => this.registry.meta(entry.gameId))
-          .filter(Boolean)
-          .map((meta) => ({
-            ...meta,
-            gameId: meta.id,
-            selectable: true,
-            hasBeenPlayed: this.state.consumedGames.includes(meta.id),
-          }));
+    // Alle Animationen (nicht nur Roulette) ziehen ihre Deko-Kandidaten aus dem
+    // vollen Spiele-Pool, damit die Auslosung optisch zufaellig aussieht, auch
+    // wenn das tatsaechliche Show-Spiel fest vorgegeben ist.
+    const choices = this._gamePoolChoices();
 
     this._clearSpinTimer();
     this.clearActiveGame(false);
@@ -664,16 +663,33 @@ class GameState {
       gameId: game.id,
       selectedGame: game,
       intro: {
-        status: 'running',
+        status: 'ready',
         animation: featured.animation,
-        startedAt: Date.now(),
+        startedAt: null,
         durationMs: featured.durationMs,
         targetGameId: game.id,
       },
     };
     this.state.phase = 'spiel-intro';
     this.touch();
-    this._scheduleIntroFinish(featured.durationMs);
+    return true;
+  }
+
+  /**
+   * Schritt 2: Die vorbereitete Animation tatsaechlich abspielen. Es gibt
+   * bewusst keinen Auto-Timer mehr auf einen Folgephase-Wechsel - der Admin
+   * entscheidet per finishFeaturedIntro() (Schritt 3), wann es weitergeht.
+   */
+  startFeaturedIntro() {
+    if (this.state.phase !== 'spiel-intro') return false;
+    const intro = this.state.round.intro;
+    if (!intro || intro.status !== 'ready') return false;
+    this.state.round.intro = {
+      ...intro,
+      status: 'running',
+      startedAt: Date.now(),
+    };
+    this.touch();
     return true;
   }
 
@@ -818,14 +834,6 @@ class GameState {
     this._spinTimer = setTimeout(() => {
       this._spinTimer = null;
       this.finishSpin();
-    }, Math.max(0, delayMs));
-  }
-
-  _scheduleIntroFinish(delayMs) {
-    this._clearSpinTimer();
-    this._spinTimer = setTimeout(() => {
-      this._spinTimer = null;
-      this.finishFeaturedIntro();
     }, Math.max(0, delayMs));
   }
 
@@ -976,6 +984,15 @@ function buildSpinSequence(choices, winnerIndex) {
   }
   sequence.push({ ...choices[winnerIndex], spinIndex: sequence.length, winner: true });
   return sequence;
+}
+
+function shuffle(items) {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 function clampInt(value, min, max) {

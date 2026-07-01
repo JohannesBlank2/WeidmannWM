@@ -87,14 +87,31 @@
 
   function renderFeaturedIntro(round) {
     const game = round.selectedGame;
+    const intro = round.intro || {};
+
+    if (intro.status === 'ready') {
+      pickerArea.innerHTML =
+        '<div class="lbl">Vorbereitet (auf dem TV noch verdeckt):</div>' +
+        `<div class="game-detail">
+          <h3>${esc(game ? game.title || game.name : 'Show-Spiel')}</h3>
+          <div class="muted">${introLabel(intro)} bereit zum Start.</div>
+        </div>` +
+        '<div class="row" style="margin-top:10px;">' +
+        '<button class="good bigbtn" data-start-featured-intro>▶ Animation starten</button>' +
+        '</div>';
+      pickerArea.querySelector('[data-start-featured-intro]').onclick = () =>
+        App.socket.emit('admin:start-featured-intro');
+      return;
+    }
+
     pickerArea.innerHTML =
       '<div class="lbl">Spiel wird vorgestellt:</div>' +
       `<div class="game-detail">
         <h3>${esc(game ? game.title || game.name : 'Show-Spiel')}</h3>
-        <div class="muted">${introLabel(round.intro)} laeuft auf dem TV.</div>
+        <div class="muted">${introLabel(intro)} laeuft auf dem TV.</div>
       </div>` +
       '<div class="row" style="margin-top:10px;">' +
-      '<button data-finish-featured-intro>Animation ueberspringen</button>' +
+      '<button class="good bigbtn" data-finish-featured-intro>Weiter zur Uebersicht</button>' +
       '</div>';
     pickerArea.querySelector('[data-finish-featured-intro]').onclick = () =>
       App.socket.emit('admin:finish-featured-intro');
@@ -269,15 +286,15 @@
         <input type="text" value="${esc(p.name)}" data-rename="${p.id}" />
         <span class="ptbox">
           <span class="tag">Coins</span>
-          <button class="bad" data-add="${p.id}" data-delta="-1">-1</button>
+          <button class="bad" data-add="${p.id}" data-delta="-5">-5</button>
           <span class="sc">${p.score}</span>
-          <button class="good" data-add="${p.id}" data-delta="1">+1</button>
+          <button class="good" data-add="${p.id}" data-delta="5">+5</button>
         </span>
         <span class="ptbox game">
           <span class="tag">Spiel</span>
-          <button class="bad" data-gadd="${p.id}" data-delta="-1">-1</button>
+          <button class="bad" data-gadd="${p.id}" data-delta="-5">-5</button>
           <span class="sc">${p.gameScore}</span>
-          <button class="good" data-gadd="${p.id}" data-delta="1">+1</button>
+          <button class="good" data-gadd="${p.id}" data-delta="5">+5</button>
         </span>`;
       playersEl.appendChild(row);
     });
@@ -333,7 +350,7 @@
           return `
             <button class="featured-game-btn ${isCurrent ? 'primary' : ''}" data-featured-slot="${game.slot}">
               <span>Spiel ${game.slot}: ${esc(game.title)}</span>
-              <span class="meta">${animationLabel(game.animation)}</span>
+              <span class="meta">Anzeigen &middot; ${animationLabel(game.animation)}</span>
             </button>`;
         })
         .join('');
@@ -341,7 +358,7 @@
     featuredGamesEl.querySelectorAll('[data-featured-slot]').forEach((btn) => {
       btn.disabled = introRunning;
       btn.onclick = () =>
-        App.socket.emit('admin:start-featured-game', { slot: Number(btn.dataset.featuredSlot) });
+        App.socket.emit('admin:prepare-featured-game', { slot: Number(btn.dataset.featuredSlot) });
     });
   }
 
@@ -411,6 +428,7 @@
     if (!intro) return 'Animation';
     if (intro.animation === 'roulette') return 'Roulette';
     if (intro.animation === 'cards') return 'Poker-Karten';
+    if (intro.animation === 'wheel') return 'Gluecksrad';
     return intro.animation === 'slot' ? 'Einarmiger Bandit' : 'Spiel-Reveal';
   }
 
@@ -418,6 +436,7 @@
     if (animation === 'slot') return 'Einarmiger Bandit';
     if (animation === 'roulette') return 'Roulette';
     if (animation === 'cards') return 'Poker-Karten';
+    if (animation === 'wheel') return 'Gluecksrad';
     return 'Reveal';
   }
 

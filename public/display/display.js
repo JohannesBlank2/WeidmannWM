@@ -304,6 +304,9 @@
   function introStage(state) {
     const round = state.round || {};
     const intro = round.intro || {};
+    if (intro.status === 'ready') {
+      return introPreview(round);
+    }
     if (intro.animation === 'slot') {
       return banditMachine(round.selectedGame, round.choices || [], true, intro.durationMs || 6200, round.number);
     }
@@ -311,9 +314,34 @@
       return rouletteReveal(round.selectedGame, round.choices || [], true, intro.durationMs || 4600, round.number);
     }
     if (intro.animation === 'cards') {
-      return cornholeCardsReveal(round.selectedGame, true, intro.durationMs || 4300, round.number);
+      return cornholeCardsReveal(round.selectedGame, round.choices || [], true, intro.durationMs || 4300, round.number);
+    }
+    if (intro.animation === 'wheel') {
+      return wheelReveal(round.selectedGame, round.choices || [], true, intro.durationMs || 5200, round.number);
     }
     return revealIntro(round);
+  }
+
+  /**
+   * "Anzeigen"-Schritt: friert den ersten Frame der jeweiligen Animation ein,
+   * statt eines leeren Textscreens - ohne das eigentliche Spiel zu verraten.
+   */
+  function introPreview(round) {
+    const intro = round.intro || {};
+    const game = round.selectedGame;
+    if (intro.animation === 'slot') {
+      return banditMachine(game, round.choices || [], false, 0, round.number, true);
+    }
+    if (intro.animation === 'roulette') {
+      return rouletteReveal(null, round.choices || [], false, 0, round.number, true);
+    }
+    if (intro.animation === 'cards') {
+      return cornholeCardsReveal(game, [], false, 0, round.number, true);
+    }
+    if (intro.animation === 'wheel') {
+      return wheelReveal(null, round.choices || [], false, 0, round.number, true);
+    }
+    return revealPreview(round);
   }
 
   function introResult(game, choices, round) {
@@ -324,19 +352,26 @@
       return rouletteReveal(game, choices, false, 0, round.number);
     }
     if (round && round.intro && round.intro.animation === 'cards') {
-      return cornholeCardsReveal(game, false, 0, round.number);
+      return cornholeCardsReveal(game, [], false, 0, round.number);
+    }
+    if (round && round.intro && round.intro.animation === 'wheel') {
+      return wheelReveal(game, choices, false, 0, round.number);
     }
     return slotResult(game, choices);
   }
 
-  function cornholeCardsReveal(game, spinning, duration, slotNumber) {
+  function cornholeCardsReveal(game, choices, spinning, duration, slotNumber, preview = false) {
     if (!game) return idle('Spielauswahl', 'Kein Spiel vorbereitet.');
     const title = game.title || game.name || 'Cornhole';
     const resolvedDuration = Math.max(1200, Number(duration) || 4300);
-    const state = spinning ? 'dealing' : 'complete';
-    const subtitle = slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel';
+    const state = preview ? 'idle' : spinning ? 'dealing' : 'complete';
+    const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel';
     const style = `--card-duration:${resolvedDuration}ms; --card-result-delay:${Math.max(0, resolvedDuration - 460)}ms`;
-    const cards = [0, 1].map((index) => cornholeCardSlot(title, index, spinning)).join('');
+    const cardMode = preview ? 'empty' : spinning ? 'animate' : 'shown';
+    const cards = [0, 1].map((index) => cornholeCardSlot(title, index, cardMode)).join('');
+    const ticker = spinning && !preview
+      ? decoyTicker(choices, game, { label: 'Der Kartenstapel', fadeDelayMs: Math.max(0, resolvedDuration - 700) })
+      : '';
 
     return `
       <div class="cornhole-reveal ${state}" style="${style}">
@@ -344,21 +379,65 @@
           <div class="cornhole-kicker">Poker Draw</div>
           <div class="cornhole-sub">${escapeHtml(subtitle)}</div>
         </div>
+        ${ticker}
         <div class="cornhole-table">
           <div class="cornhole-slots">${cards}</div>
-          <div class="cornhole-result">
-            <div>Naechstes Spiel</div>
-            <b>${escapeHtml(title)}</b>
-          </div>
+        </div>
+        ${preview ? '' : `
+        <div class="cornhole-result">
+          <div>Naechstes Spiel</div>
+          <b>${escapeHtml(title)}</b>
+        </div>`}
+      </div>`;
+  }
+
+  /**
+   * Ambient Marquee mit anderen Spieletiteln, damit die Auslosung zufaellig
+   * wirkt, obwohl das Zielspiel serverseitig fix vorgegeben ist. `fadeDelayMs`
+   * blendet den Ticker kurz vor dem eigentlichen Reveal aus.
+   */
+  function decoyTicker(choices, targetGame, options = {}) {
+    const targetId = targetGame && (targetGame.gameId || targetGame.id);
+    const names = (choices || [])
+      .filter((c) => (c.gameId || c.id) !== targetId)
+      .map((c) => c.title || c.name)
+      .filter(Boolean);
+    if (!names.length) return '';
+    const shuffled = shuffleArray(names);
+    const loop = shuffled.length < 6 ? [...shuffled, ...shuffled, ...shuffled] : shuffled;
+    const track = [...loop, ...loop];
+    const style = options.fadeDelayMs != null
+      ? `--ticker-fade-delay:${Math.max(0, options.fadeDelayMs)}ms`
+      : '';
+    return `
+      <div class="decoy-ticker${options.static ? ' static' : ''}" style="${style}">
+        <div class="decoy-ticker-label">${escapeHtml(options.label || 'Im Lostopf')}</div>
+        <div class="decoy-ticker-track${options.static ? ' static' : ''}">
+          ${track.map((name) => `<span>${escapeHtml(name)}</span>`).join('')}
         </div>
       </div>`;
   }
 
-  function cornholeCardSlot(title, index, spinning) {
+  function shuffleArray(items) {
+    const out = [...items];
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
+  function cornholeCardSlot(title, index, mode) {
+    if (mode === 'empty') {
+      return `
+      <div class="cornhole-slot">
+        <div class="cornhole-slot-label">Slot ${index + 1}</div>
+      </div>`;
+    }
     return `
       <div class="cornhole-slot">
         <div class="cornhole-slot-label">Slot ${index + 1}</div>
-        <div class="cornhole-card ${spinning ? 'animate' : 'shown'}" style="--card-index:${index}">
+        <div class="cornhole-card ${mode === 'animate' ? 'animate' : mode === 'shown' ? 'shown' : ''}" style="--card-index:${index}">
           <div class="cornhole-card-inner">
             <div class="cornhole-card-face back">
               <div class="cornhole-card-pattern">W</div>
@@ -373,17 +452,25 @@
       </div>`;
   }
 
-  function banditMachine(game, choices, spinning, duration, slotNumber) {
+  function banditMachine(game, choices, spinning, duration, slotNumber, frozen = false) {
     if (!game) return idle('Spielauswahl', 'Kein Spiel vorbereitet.');
     const reels = [0, 1, 2]
-      .map((reelIndex) => banditReel(game, choices, reelIndex, spinning, duration))
+      .map((reelIndex) => banditReel(game, choices, reelIndex, spinning, duration, frozen))
       .join('');
     const lights = Array.from({ length: 13 }, (_, i) => `<span style="--i:${i}"></span>`).join('');
     const subtitle = slotNumber ? `Spiel ${slotNumber}` : 'Show-Spiel';
+    const machineMode = frozen ? 'intro-mode' : spinning ? 'pulling intro-mode' : 'settled result-mode';
+    const isRevealing = spinning && !frozen;
+    const prizeLabel = frozen ? 'Bereit ...' : game.title || game.name;
+    // Der Preis darf erst auftauchen, wenn auch die letzte (langsamste) Walze
+    // wirklich gelandet ist - sonst verraet die Anzeige das Ergebnis, bevor
+    // die Walzen ueberhaupt stehen.
+    const lastReelDuration = Math.max(1400, (duration || 0) - 420 + 2 * 180);
+    const prizeStyle = `--prize-reveal-delay:${Math.max(0, lastReelDuration - 100)}ms`;
 
     return `
       <div class="bandit-wrap">
-        <div class="bandit-machine ${spinning ? 'pulling intro-mode' : 'settled result-mode'}">
+        <div class="bandit-machine ${machineMode}">
           <div class="bandit-dome">
             <div class="bandit-stars">★ ★ ★</div>
             <div class="bandit-sign">WEIDMANN EM</div>
@@ -399,7 +486,7 @@
             <div class="bandit-plaque">${escapeHtml(subtitle)}</div>
           </div>
           <div class="bandit-base">
-            <div class="bandit-prize">${escapeHtml(game.title || game.name)}</div>
+            <div class="bandit-prize ${isRevealing ? 'pending' : ''}" style="${isRevealing ? prizeStyle : ''}">${escapeHtml(prizeLabel)}</div>
           </div>
           <div class="bandit-lever">
             <div class="lever-stick"></div>
@@ -409,16 +496,18 @@
       </div>`;
   }
 
-  function banditReel(winner, choices, reelIndex, spinning, duration) {
-    const sequence = spinning
+  function banditReel(winner, choices, reelIndex, spinning, duration, frozen = false) {
+    const buildFullSequence = spinning || frozen;
+    const sequence = buildFullSequence
       ? buildBanditSequence(choices, winner, reelIndex)
       : [{ ...winner, winner: true }];
     const steps = Math.max(0, sequence.length - 1);
     const reelDuration = Math.max(1400, duration - 420 + reelIndex * 180);
+    const isAnimating = spinning && !frozen;
 
     return `
       <div class="bandit-reel-window">
-        <div class="bandit-reel-track ${spinning ? 'spinning' : ''}"
+        <div class="bandit-reel-track ${isAnimating ? 'spinning' : ''}"
              style="--spin-duration:${reelDuration}ms; --reel-steps:${steps}">
           ${sequence.map((item) => banditCard(item)).join('')}
         </div>
@@ -455,26 +544,154 @@
       </div>`;
   }
 
-  function revealIntro(round) {
+  function revealPreview(round) {
     const game = round.selectedGame;
-    if (!game) return idle('Show-Spiel', 'Kein Spiel vorbereitet.');
+    const ticker = decoyTicker(round.choices, game, {
+      label: 'Wer ist als naechstes dran ...',
+      static: true,
+    });
     return `
       <div class="intro-reveal">
         <div class="intro-kicker">Spiel ${round.number || '-'}</div>
-        <div class="intro-title">${escapeHtml(game.title || game.name)}</div>
-        <div class="intro-meta">${categoryLabel(game.category)}</div>
+        ${ticker}
       </div>`;
   }
 
-  function rouletteReveal(targetGame, choices, spinning, duration, slotNumber) {
+  function revealIntro(round) {
+    const game = round.selectedGame;
+    if (!game) return idle('Show-Spiel', 'Kein Spiel vorbereitet.');
+    const duration = Math.max(900, Number(round.intro && round.intro.durationMs) || 2200);
+    const revealDelay = Math.max(300, duration - 900);
+    const ticker = decoyTicker(round.choices, game, {
+      label: 'Wer ist als naechstes dran ...',
+      fadeDelayMs: revealDelay,
+    });
+    return `
+      <div class="intro-reveal" style="--reveal-delay:${revealDelay}ms">
+        <div class="intro-kicker">Spiel ${round.number || '-'}</div>
+        ${ticker}
+        <div class="intro-title pending">${escapeHtml(game.title || game.name)}</div>
+        <div class="intro-meta pending">${categoryLabel(game.category)}</div>
+      </div>`;
+  }
+
+  const WHEEL_FACE_COUNT = 7;
+  const WHEEL_FACE_HEIGHT = 150;
+  const WHEEL_FACE_RADIUS = Math.round((WHEEL_FACE_HEIGHT / 2) / Math.tan(Math.PI / WHEEL_FACE_COUNT));
+  const WHEEL_FACE_THEMES = [
+    { bg: 'linear-gradient(180deg, #14151c, #06070a)', fg: '#fff8df', border: '#d8b75a' },
+    { bg: 'linear-gradient(180deg, #17915f, #0a5138)', fg: '#f2fff6', border: '#d8b75a' },
+    { bg: 'linear-gradient(180deg, #fff3d6, #f4d78a)', fg: '#a3121c', border: '#7c5a1e' },
+  ];
+  // Neutrale Fuellfarben, sobald Gewinner-Hervorhebung aktiv ist - ohne Gruen,
+  // damit nur die echten Nachbarn des Zielspiels gruen erscheinen.
+  const WHEEL_FILLER_THEMES = [
+    { bg: 'linear-gradient(180deg, #14151c, #06070a)', fg: '#fff8df', border: '#d8b75a' },
+    { bg: 'linear-gradient(180deg, #fff3d6, #f4d78a)', fg: '#a3121c', border: '#7c5a1e' },
+  ];
+  const WHEEL_TARGET_THEME = { bg: 'linear-gradient(180deg, #fff7a8, #ffd15c)', fg: '#241104', border: '#fff3bd' };
+  const WHEEL_NEIGHBOR_THEME = { bg: 'linear-gradient(180deg, #17915f, #0a5138)', fg: '#f2fff6', border: '#d8b75a' };
+
+  /**
+   * Vertikale Gluecksrad-Trommel (Price-is-Right-Stil): statt Zahlen zeigt
+   * jede Kammer einen Spieletitel, der Pfeil rechts markiert die aktuelle
+   * Ausrichtung. Landet immer auf dem echten Zielspiel.
+   */
+  function wheelReveal(targetGame, choices, spinning, duration, slotNumber, preview = false) {
+    const pool = (Array.isArray(choices) ? choices : []).filter(Boolean);
+    const target = targetGame || pool[0];
+    if (!target) return idle('Spielauswahl', 'Kein Spiel vorbereitet.');
+
+    const decoys = pool.filter((game) => !sameGame(game, target));
+    const faceGames = shuffleArray([target, ...decoys.slice(0, WHEEL_FACE_COUNT - 1)]);
+    const count = faceGames.length;
+    const faceAngle = 360 / count;
+    const targetIndex = faceGames.findIndex((game) => sameGame(game, target));
+    const fullSpins = 6;
+    const finalRotation = preview ? 0 : roundCoord(-(fullSpins * 360 + targetIndex * faceAngle));
+    const resolvedDuration = Math.max(900, Number(duration) || 5200);
+    const isSpinning = spinning && !preview;
+    const state = preview ? 'idle' : spinning ? 'spinning' : 'complete';
+    const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel';
+    // Gold fuer das Zielspiel und gruen fuer seine direkten Nachbarn - aber
+    // nur, sobald wirklich gedreht wird/das Ergebnis feststeht. Im "Bereit"-
+    // Preview darf das nicht zu sehen sein, sonst verraet die Farbe das Spiel.
+    const roles = preview ? null : wheelHighlightRoles(targetIndex, count);
+    const fillerThemes = preview ? WHEEL_FACE_THEMES : WHEEL_FILLER_THEMES;
+    const faces = faceGames
+      .map((game, index) => wheelFace(game, index, faceAngle, roles && roles[index], fillerThemes))
+      .join('');
+    const drumStyle = `--wheel-final:${finalRotation}deg; --wheel-duration:${resolvedDuration}ms`;
+    // Die Ergebnis-Box darf erst auftauchen, wenn die Trommel wirklich steht -
+    // sonst verraet sie das Spiel, waehrend oben noch gedreht wird.
+    const resultRevealDelay = Math.max(0, resolvedDuration - 120);
+    const lights = Array.from({ length: 10 }, (_, i) => `<span style="--i:${i}"></span>`).join('');
+
+    return `
+      <div class="wheel-reveal ${state}">
+        <div class="wheel-copy">
+          <div class="wheel-kicker">Gluecksrad</div>
+          <div class="wheel-sub">${escapeHtml(subtitle)}</div>
+        </div>
+        <div class="wheel-frame">
+          <div class="wheel-lights">${lights}</div>
+          <div class="wheel-display">SPIEL ${slotNumber || '-'}</div>
+          <div class="wheel-pillar left"><span>★</span></div>
+          <div class="wheel-stage">
+            <div class="wheel-drum ${isSpinning ? 'spinning' : ''}" style="${drumStyle}">
+              ${faces}
+            </div>
+          </div>
+          <div class="wheel-pillar right">
+            <span>★</span>
+            <div class="wheel-arrow"></div>
+          </div>
+        </div>
+        ${preview ? '' : `
+        <div class="wheel-result ${isSpinning ? 'pending' : ''}" style="--result-reveal-delay:${resultRevealDelay}ms">
+          <div>Naechstes Spiel</div>
+          <b>${escapeHtml(target.title || target.name)}</b>
+        </div>`}
+      </div>`;
+  }
+
+  function wheelHighlightRoles(targetIndex, count) {
+    const roles = new Array(count).fill(null);
+    roles[targetIndex] = 'target';
+    const prevIndex = (targetIndex - 1 + count) % count;
+    const nextIndex = (targetIndex + 1) % count;
+    if (prevIndex !== targetIndex) roles[prevIndex] = 'neighbor';
+    if (nextIndex !== targetIndex) roles[nextIndex] = 'neighbor';
+    return roles;
+  }
+
+  function wheelFace(game, index, faceAngle, role, fillerThemes) {
+    const label = shortRouletteLabel(game.title || game.name || '');
+    const angle = roundCoord(index * faceAngle);
+    const themes = fillerThemes || WHEEL_FACE_THEMES;
+    const theme =
+      role === 'target' ? WHEEL_TARGET_THEME
+      : role === 'neighbor' ? WHEEL_NEIGHBOR_THEME
+      : themes[index % themes.length];
+    const style =
+      `transform: rotateX(${angle}deg) translateZ(${WHEEL_FACE_RADIUS}px); ` +
+      `background:${theme.bg}; color:${theme.fg}; border-color:${theme.border};`;
+    return `
+      <div class="wheel-face" style="${style}">
+        <span>${escapeHtml(label)}</span>
+      </div>`;
+  }
+
+  function rouletteReveal(targetGame, choices, spinning, duration, slotNumber, preview = false) {
     const targetLabel = targetGame ? targetGame.title || targetGame.name || String(targetGame) : '';
     const games = rouletteLabels(targetLabel, rouletteGames(targetGame, choices));
     return GameRouletteReveal({
       games,
-      targetGame: targetLabel || games[0],
+      targetGame: preview ? null : targetLabel || games[0],
       durationMs: duration || 4600,
       spinning,
-      subtitle: slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel',
+      subtitle: preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel',
+      preview,
     });
   }
 
@@ -484,6 +701,7 @@
     durationMs = 4600,
     spinning = true,
     subtitle = 'Naechstes Spiel',
+    preview = false,
     onComplete,
   }) {
     const labels = Array.isArray(games)
@@ -495,16 +713,16 @@
     }
 
     const targetLabel = labels.includes(targetGame) ? targetGame : labels[0];
-    const targetIndex = labels.indexOf(targetLabel);
+    const targetIndex = preview ? -1 : labels.indexOf(targetLabel);
     const count = labels.length;
     const segmentAngle = 360 / count;
     const targetSegmentCenterAngle = targetIndex * segmentAngle + segmentAngle / 2;
     const targetStopAngle = 90;
     const fullSpins = count === 1 ? 2 : 7;
-    const finalRotation = fullSpins * 360 + targetStopAngle - targetSegmentCenterAngle;
-    const ballRotation = -((fullSpins + 2) * 360) + targetStopAngle;
+    const finalRotation = preview ? 0 : fullSpins * 360 + targetStopAngle - targetSegmentCenterAngle;
+    const ballRotation = preview ? 0 : -((fullSpins + 2) * 360) + targetStopAngle;
     const resolvedDuration = Math.max(900, Number(durationMs) || 4600);
-    const state = spinning ? 'spinning' : 'complete';
+    const state = preview ? 'idle' : spinning ? 'spinning' : 'complete';
     const revealId = `roulette-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const segments = labels
       .map((label, index) => rouletteSegment(label, index, count, index === targetIndex))
@@ -516,12 +734,12 @@
       `--result-delay:${Math.max(0, resolvedDuration - 300)}ms; ` +
       `--glow-delay:${Math.max(0, resolvedDuration - 800)}ms`;
 
-    queueRouletteComplete(revealId, spinning ? resolvedDuration : 0, onComplete);
+    queueRouletteComplete(revealId, spinning && !preview ? resolvedDuration : 0, onComplete);
 
     return `
       <div id="${revealId}" class="roulette-reveal ${state}" data-state="${state}" style="${wheelStyle}">
         <div class="roulette-copy">
-          <div class="roulette-kicker">Naechstes Spiel wird gezogen</div>
+          <div class="roulette-kicker">${preview ? 'Roulette' : 'Naechstes Spiel wird gezogen'}</div>
           <div class="roulette-sub">${escapeHtml(subtitle)}</div>
         </div>
         <div class="roulette-stage">
@@ -546,7 +764,7 @@
             </defs>
             <circle class="roulette-outer" cx="300" cy="300" r="288"></circle>
             <circle class="roulette-rail" cx="300" cy="300" r="252"></circle>
-            <g class="roulette-wheel-disc ${spinning ? 'spinning' : 'complete'}">
+            <g class="roulette-wheel-disc ${spinning && !preview ? 'spinning' : 'complete'}">
               ${segments}
               <circle class="roulette-pocket-ring" cx="300" cy="300" r="202"></circle>
               <circle class="roulette-inner-ring" cx="300" cy="300" r="116"></circle>
@@ -554,10 +772,11 @@
               <circle class="roulette-hub-dot" cx="300" cy="300" r="18"></circle>
             </g>
           </svg>
+          ${preview ? '' : `
           <div class="roulette-result">
             <div>Naechstes Spiel</div>
             <b>${escapeHtml(targetLabel)}</b>
-          </div>
+          </div>`}
         </div>
       </div>`;
   }
@@ -634,13 +853,13 @@
 
   function rouletteLabelPlacement(angleDeg) {
     const leftSide = angleDeg > 180;
-    const radius = leftSide ? 236 : 138;
+    const radius = 138;
     const point = polarTop(300, 300, radius, angleDeg);
     return {
       x: point.x,
       y: point.y,
       rotation: roundCoord(leftSide ? angleDeg + 90 : angleDeg - 90),
-      anchor: 'start',
+      anchor: leftSide ? 'end' : 'start',
     };
   }
 

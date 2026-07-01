@@ -50,6 +50,19 @@
       width: 100%; border: 1px solid var(--line); background: #13070a; color: var(--text);
       border-radius: 8px; padding: 14px; font: inherit; font-weight: 800;
     }
+    .bet-stepper {
+      display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 10px; align-items: stretch;
+    }
+    .bet-step-btn {
+      padding: 16px 8px; font-size: 1.4rem; font-weight: 900; border-radius: 8px;
+      border: 1px solid var(--accent); background: var(--panel); color: var(--text);
+    }
+    .bet-step-btn:disabled { opacity: .35; }
+    .bet-amount {
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--line); background: #13070a; color: var(--accent);
+      border-radius: 8px; font-size: 1.8rem; font-weight: 900;
+    }
     .waiting { text-align: center; color: var(--muted); padding: 30px 10px; }
     .waiting .big { font-size: 1.4rem; color: var(--text); margin-bottom: 8px; }
 
