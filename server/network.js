@@ -4,8 +4,8 @@ const os = require('os');
 
 /**
  * Liefert die erste nicht-interne IPv4-Adresse (das WLAN/LAN-Interface),
- * damit Handys, TV und Admin-Geraet den Server im lokalen Netz erreichen.
- * Faellt auf 127.0.0.1 zurueck, falls nichts gefunden wird.
+ * damit Handys, TV und Admin-Gerät den Server im lokalen Netz erreichen.
+ * Faellt auf 127.0.0.1 zurück, falls nichts gefunden wird.
  */
 function getLocalIp() {
   const interfaces = os.networkInterfaces();

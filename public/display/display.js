@@ -28,7 +28,7 @@
     'Emoji Filmquiz',
     '2016?',
     'Ferngesteuerte Scharade',
-    'Fussballbowling',
+    'Fußballbowling',
     'Labyrinth',
     'Shazam',
     'Papierflieger',
@@ -47,7 +47,7 @@
     'How much is the fish': 'Fish',
     'Emoji Filmquiz': 'Emoji',
     'Ferngesteuerte Scharade': 'Scharade',
-    Fussballbowling: 'Bowling',
+    Fußballbowling: 'Bowling',
     Labyrinth: 'Labyr.',
     Papierflieger: 'Flieger',
     'Partner Zielwurf': 'Zielwurf',
@@ -109,15 +109,15 @@
 
     if (state.phase === 'lobby') {
       contentEl.innerHTML = tableScene(state, {
-        eyebrow: 'WEIDMANN EM',
+        eyebrow: 'WEIDMANN WM Poker Edition',
         title: 'Lobby',
         status: 'Spieler treten per Handy bei',
       });
     } else if (state.phase === 'runden-uebersicht') {
       contentEl.innerHTML = tableScene(state, {
-        eyebrow: 'Naechstes Spiel',
+        eyebrow: 'Nächstes Spiel',
         title: `Runde ${r.number}`,
-        status: `${stripTags(pickerHtml)} waehlt die Kategorie`,
+        status: `${stripTags(pickerHtml)} wählt die Kategorie`,
       });
     } else if (state.phase === 'kategorie-auswahl') {
       const cats = (r.availableCategories || []).map(categoryLabel).join(' &nbsp; ');
@@ -141,7 +141,7 @@
       contentEl.innerHTML = finale(state);
     } else {
       contentEl.innerHTML = tableScene(state, {
-        eyebrow: 'WEIDMANN EM',
+        eyebrow: 'WEIDMANN WM Poker Edition',
         title: 'Lobby',
         status: 'Spieler treten per Handy bei',
       });
@@ -197,7 +197,7 @@
     const duration = (r.spin && r.spin.durationMs) || 4600;
     const status = spinning
       ? 'Die Walzen laufen ...'
-      : `${picker ? escapeHtml(picker.name) : 'Der Spieler'} drueckt gleich auf Spin`;
+      : `${picker ? escapeHtml(picker.name) : 'Der Spieler'} drückt gleich auf Spin`;
     const reels = [0, 1, 2].map((reelIndex) =>
       reelHtml(choices, winner, reelIndex, spinning, duration)
     ).join('');
@@ -319,6 +319,9 @@
     if (intro.animation === 'wheel') {
       return wheelReveal(round.selectedGame, round.choices || [], true, intro.durationMs || 5200, round.number);
     }
+    if (isScratchIntro(round)) {
+      return scratchTicketReveal(round.selectedGame, round.choices || [], true, intro.durationMs || 5600, round.number);
+    }
     return revealIntro(round);
   }
 
@@ -341,6 +344,9 @@
     if (intro.animation === 'wheel') {
       return wheelReveal(null, round.choices || [], false, 0, round.number, true);
     }
+    if (isScratchIntro(round)) {
+      return scratchTicketReveal(game, round.choices || [], false, 0, round.number, true);
+    }
     return revealPreview(round);
   }
 
@@ -357,6 +363,9 @@
     if (round && round.intro && round.intro.animation === 'wheel') {
       return wheelReveal(game, choices, false, 0, round.number);
     }
+    if (isScratchIntro(round)) {
+      return scratchTicketReveal(game, choices, false, 0, round.number);
+    }
     return slotResult(game, choices);
   }
 
@@ -365,13 +374,10 @@
     const title = game.title || game.name || 'Cornhole';
     const resolvedDuration = Math.max(1200, Number(duration) || 4300);
     const state = preview ? 'idle' : spinning ? 'dealing' : 'complete';
-    const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel';
+    const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Nächstes Spiel';
     const style = `--card-duration:${resolvedDuration}ms; --card-result-delay:${Math.max(0, resolvedDuration - 460)}ms`;
     const cardMode = preview ? 'empty' : spinning ? 'animate' : 'shown';
     const cards = [0, 1].map((index) => cornholeCardSlot(title, index, cardMode)).join('');
-    const ticker = spinning && !preview
-      ? decoyTicker(choices, game, { label: 'Der Kartenstapel', fadeDelayMs: Math.max(0, resolvedDuration - 700) })
-      : '';
 
     return `
       <div class="cornhole-reveal ${state}" style="${style}">
@@ -379,20 +385,19 @@
           <div class="cornhole-kicker">Poker Draw</div>
           <div class="cornhole-sub">${escapeHtml(subtitle)}</div>
         </div>
-        ${ticker}
         <div class="cornhole-table">
           <div class="cornhole-slots">${cards}</div>
         </div>
         ${preview ? '' : `
         <div class="cornhole-result">
-          <div>Naechstes Spiel</div>
+          <div>Nächstes Spiel</div>
           <b>${escapeHtml(title)}</b>
         </div>`}
       </div>`;
   }
 
   /**
-   * Ambient Marquee mit anderen Spieletiteln, damit die Auslosung zufaellig
+   * Ambient Marquee mit anderen Spieletiteln, damit die Auslosung zufällig
    * wirkt, obwohl das Zielspiel serverseitig fix vorgegeben ist. `fadeDelayMs`
    * blendet den Ticker kurz vor dem eigentlichen Reveal aus.
    */
@@ -463,8 +468,8 @@
     const isRevealing = spinning && !frozen;
     const prizeLabel = frozen ? 'Bereit ...' : game.title || game.name;
     // Der Preis darf erst auftauchen, wenn auch die letzte (langsamste) Walze
-    // wirklich gelandet ist - sonst verraet die Anzeige das Ergebnis, bevor
-    // die Walzen ueberhaupt stehen.
+    // wirklich gelandet ist - sonst verrät die Anzeige das Ergebnis, bevor
+    // die Walzen überhaupt stehen.
     const lastReelDuration = Math.max(1400, (duration || 0) - 420 + 2 * 180);
     const prizeStyle = `--prize-reveal-delay:${Math.max(0, lastReelDuration - 100)}ms`;
 
@@ -473,7 +478,7 @@
         <div class="bandit-machine ${machineMode}">
           <div class="bandit-dome">
             <div class="bandit-stars">★ ★ ★</div>
-            <div class="bandit-sign">WEIDMANN EM</div>
+            <div class="bandit-sign">WEIDMANN WM Poker Edition</div>
           </div>
           <div class="bandit-lights">${lights}</div>
           <div class="bandit-face">
@@ -547,7 +552,7 @@
   function revealPreview(round) {
     const game = round.selectedGame;
     const ticker = decoyTicker(round.choices, game, {
-      label: 'Wer ist als naechstes dran ...',
+      label: 'Wer ist als nächstes dran ...',
       static: true,
     });
     return `
@@ -563,7 +568,7 @@
     const duration = Math.max(900, Number(round.intro && round.intro.durationMs) || 2200);
     const revealDelay = Math.max(300, duration - 900);
     const ticker = decoyTicker(round.choices, game, {
-      label: 'Wer ist als naechstes dran ...',
+      label: 'Wer ist als nächstes dran ...',
       fadeDelayMs: revealDelay,
     });
     return `
@@ -575,6 +580,84 @@
       </div>`;
   }
 
+  function isScratchIntro(round) {
+    const intro = round && round.intro;
+    const game = round && round.selectedGame;
+    const gameId = game && (game.gameId || game.id);
+    return !!intro && (
+      intro.animation === 'scratch' ||
+      (intro.animation === 'reveal' && gameId === 'einkauf-schaetzen')
+    );
+  }
+
+  function scratchTicketReveal(game, choices, scratching, duration, slotNumber, preview = false) {
+    if (!game) return idle('Show-Spiel', 'Kein Spiel vorbereitet.');
+    const title = game.title || game.name || 'Nächstes Spiel';
+    const resolvedDuration = Math.max(1800, Number(duration) || 5600);
+    const state = preview ? 'idle' : scratching ? 'scratching' : 'complete';
+    const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Nächstes Spiel';
+    const titleDelay = Math.max(0, resolvedDuration - 760);
+    const promptDelay = Math.max(300, Math.round(resolvedDuration * 0.18));
+    const style =
+      `--scratch-duration:${resolvedDuration}ms; ` +
+      `--scratch-title-delay:${titleDelay}ms; ` +
+      `--scratch-prompt-delay:${promptDelay}ms`;
+
+    return `
+      <div class="scratch-reveal ${state}" style="${style}">
+        <div class="scratch-copy">
+          <div class="scratch-copy-kicker">Rubbelkarte</div>
+          <div class="scratch-copy-sub">${escapeHtml(subtitle)}</div>
+        </div>
+        <div class="scratch-card-wrap">
+          <div class="scratch-ticket">
+            <div class="scratch-ticket-label">WEIDMANN WM Poker Edition</div>
+            <div class="scratch-window">
+              <div class="scratch-prize">
+                <div>
+                  <div class="scratch-prize-kicker">Nächstes Spiel</div>
+                  <div class="scratch-prize-title">${escapeHtml(title)}</div>
+                  <div class="scratch-prize-meta">${categoryLabel(game.category)}</div>
+                </div>
+              </div>
+              <div class="scratch-foil" aria-hidden="true">
+                ${scratchFoilStrips(resolvedDuration)}
+                <div class="scratch-prompt">HIER RUBBELN</div>
+              </div>
+              <div class="scratch-coin" aria-hidden="true"></div>
+              ${scratchDust(resolvedDuration)}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function scratchFoilStrips(duration) {
+    const stripDuration = Math.round(duration * 0.24);
+    const stripGap = Math.round(duration * 0.13);
+    return Array.from({ length: 5 }, (_, index) => {
+      const top = -1 + index * 19.8;
+      const delay = 520 + index * stripGap;
+      const direction = index % 2 === 0 ? 'from-left' : 'from-right';
+      return `<span class="scratch-strip ${direction}" style="top:${top}%; --strip-delay:${delay}ms; --strip-duration:${stripDuration}ms"></span>`;
+    }).join('');
+  }
+
+  function scratchDust(duration) {
+    return Array.from({ length: 34 }, (_, index) => {
+      const row = index % 5;
+      const rowProgress = ((index * 37) % 100) / 100;
+      const leftToRight = row % 2 === 0;
+      const x = leftToRight ? 12 + rowProgress * 76 : 88 - rowProgress * 76;
+      const y = 24 + row * 12.5 + Math.sin(rowProgress * Math.PI * 2) * 4.2;
+      const delay = Math.round(520 + row * duration * 0.13 + rowProgress * duration * 0.13);
+      const dx = Math.round(-36 + ((index * 19) % 72));
+      const dy = Math.round(-34 + ((index * 29) % 68));
+      const size = 4 + (index % 5);
+      return `<span class="scratch-dust" style="--x:${roundCoord(x)}%; --y:${roundCoord(y)}%; --dx:${dx}px; --dy:${dy}px; --dust-delay:${delay}ms; --dust-size:${size}px"></span>`;
+    }).join('');
+  }
+
   const WHEEL_FACE_COUNT = 7;
   const WHEEL_FACE_HEIGHT = 150;
   const WHEEL_FACE_RADIUS = Math.round((WHEEL_FACE_HEIGHT / 2) / Math.tan(Math.PI / WHEEL_FACE_COUNT));
@@ -583,8 +666,8 @@
     { bg: 'linear-gradient(180deg, #17915f, #0a5138)', fg: '#f2fff6', border: '#d8b75a' },
     { bg: 'linear-gradient(180deg, #fff3d6, #f4d78a)', fg: '#a3121c', border: '#7c5a1e' },
   ];
-  // Neutrale Fuellfarben, sobald Gewinner-Hervorhebung aktiv ist - ohne Gruen,
-  // damit nur die echten Nachbarn des Zielspiels gruen erscheinen.
+  // Neutrale Füllfarben, sobald Gewinner-Hervorhebung aktiv ist - ohne Grün,
+  // damit nur die echten Nachbarn des Zielspiels grün erscheinen.
   const WHEEL_FILLER_THEMES = [
     { bg: 'linear-gradient(180deg, #14151c, #06070a)', fg: '#fff8df', border: '#d8b75a' },
     { bg: 'linear-gradient(180deg, #fff3d6, #f4d78a)', fg: '#a3121c', border: '#7c5a1e' },
@@ -593,7 +676,7 @@
   const WHEEL_NEIGHBOR_THEME = { bg: 'linear-gradient(180deg, #17915f, #0a5138)', fg: '#f2fff6', border: '#d8b75a' };
 
   /**
-   * Vertikale Gluecksrad-Trommel (Price-is-Right-Stil): statt Zahlen zeigt
+   * Vertikale Glücksrad-Trommel (Price-is-Right-Stil): statt Zahlen zeigt
    * jede Kammer einen Spieletitel, der Pfeil rechts markiert die aktuelle
    * Ausrichtung. Landet immer auf dem echten Zielspiel.
    */
@@ -612,10 +695,10 @@
     const resolvedDuration = Math.max(900, Number(duration) || 5200);
     const isSpinning = spinning && !preview;
     const state = preview ? 'idle' : spinning ? 'spinning' : 'complete';
-    const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel';
-    // Gold fuer das Zielspiel und gruen fuer seine direkten Nachbarn - aber
+    const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Nächstes Spiel';
+    // Gold für das Zielspiel und grün für seine direkten Nachbarn - aber
     // nur, sobald wirklich gedreht wird/das Ergebnis feststeht. Im "Bereit"-
-    // Preview darf das nicht zu sehen sein, sonst verraet die Farbe das Spiel.
+    // Preview darf das nicht zu sehen sein, sonst verrät die Farbe das Spiel.
     const roles = preview ? null : wheelHighlightRoles(targetIndex, count);
     const fillerThemes = preview ? WHEEL_FACE_THEMES : WHEEL_FILLER_THEMES;
     const faces = faceGames
@@ -623,14 +706,14 @@
       .join('');
     const drumStyle = `--wheel-final:${finalRotation}deg; --wheel-duration:${resolvedDuration}ms`;
     // Die Ergebnis-Box darf erst auftauchen, wenn die Trommel wirklich steht -
-    // sonst verraet sie das Spiel, waehrend oben noch gedreht wird.
+    // sonst verrät sie das Spiel, während oben noch gedreht wird.
     const resultRevealDelay = Math.max(0, resolvedDuration - 120);
     const lights = Array.from({ length: 10 }, (_, i) => `<span style="--i:${i}"></span>`).join('');
 
     return `
       <div class="wheel-reveal ${state}">
         <div class="wheel-copy">
-          <div class="wheel-kicker">Gluecksrad</div>
+          <div class="wheel-kicker">Glücksrad</div>
           <div class="wheel-sub">${escapeHtml(subtitle)}</div>
         </div>
         <div class="wheel-frame">
@@ -649,7 +732,7 @@
         </div>
         ${preview ? '' : `
         <div class="wheel-result ${isSpinning ? 'pending' : ''}" style="--result-reveal-delay:${resultRevealDelay}ms">
-          <div>Naechstes Spiel</div>
+          <div>Nächstes Spiel</div>
           <b>${escapeHtml(target.title || target.name)}</b>
         </div>`}
       </div>`;
@@ -690,7 +773,7 @@
       targetGame: preview ? null : targetLabel || games[0],
       durationMs: duration || 4600,
       spinning,
-      subtitle: preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Naechstes Spiel',
+      subtitle: preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Nächstes Spiel',
       preview,
     });
   }
@@ -700,7 +783,7 @@
     targetGame,
     durationMs = 4600,
     spinning = true,
-    subtitle = 'Naechstes Spiel',
+    subtitle = 'Nächstes Spiel',
     preview = false,
     onComplete,
   }) {
@@ -709,7 +792,7 @@
       : [];
 
     if (!labels.length) {
-      return '<div class="roulette-empty">Keine Spiele fuer das Roulette vorbereitet.</div>';
+      return '<div class="roulette-empty">Keine Spiele für das Roulette vorbereitet.</div>';
     }
 
     const targetLabel = labels.includes(targetGame) ? targetGame : labels[0];
@@ -739,7 +822,7 @@
     return `
       <div id="${revealId}" class="roulette-reveal ${state}" data-state="${state}" style="${wheelStyle}">
         <div class="roulette-copy">
-          <div class="roulette-kicker">${preview ? 'Roulette' : 'Naechstes Spiel wird gezogen'}</div>
+          <div class="roulette-kicker">${preview ? 'Roulette' : 'Nächstes Spiel wird gezogen'}</div>
           <div class="roulette-sub">${escapeHtml(subtitle)}</div>
         </div>
         <div class="roulette-stage">
@@ -774,7 +857,7 @@
           </svg>
           ${preview ? '' : `
           <div class="roulette-result">
-            <div>Naechstes Spiel</div>
+            <div>Nächstes Spiel</div>
             <b>${escapeHtml(targetLabel)}</b>
           </div>`}
         </div>
@@ -866,7 +949,7 @@
   function shortRouletteLabel(value) {
     const text = String(value || '-');
     const mapped = ROULETTE_SHORT_LABELS[text] || text;
-    const max = 8;
+    const max = 10;
     if (text === '2016?') return text;
     const label = String(mapped || text);
     return label.length > max ? label.slice(0, max) : label;
@@ -939,12 +1022,12 @@
       <div class="choices-wrap">
         ${introResult(r.selectedGame, r.choices || [], r)}
         <div class="game-head">
-          <div class="title">Geheime Einsaetze</div>
+          <div class="title">Geheime Einsätze</div>
           <div class="meta">${escapeHtml(r.selectedGame ? r.selectedGame.title || r.selectedGame.name : 'Spiel')}</div>
         </div>
         <div class="choice-card" style="max-width:760px;margin:24px auto;">
           <div class="cn">${count}/${total}</div>
-          <div class="cm">Spieler haben ihren Einsatz bestaetigt</div>
+          <div class="cm">Spieler haben ihren Einsatz bestätigt</div>
         </div>
       </div>`;
   }
@@ -962,7 +1045,7 @@
         .join('');
       return `<div class="choices-wrap"><div class="choices-title">Auszahlung</div><div class="choices">${cards}</div></div>`;
     }
-    return idle('Auswertung', 'Admin traegt die Platzierungen ein.');
+    return idle('Auswertung', 'Admin trägt die Platzierungen ein.');
   }
 
   function finale(state) {
@@ -1004,9 +1087,25 @@
     joinQrEl.style.display = 'none';
     contentEl.innerHTML = cornholeCardsReveal(
       { title: cardsDemoTarget, name: cardsDemoTarget },
+      [],
       true,
       4300,
       3
+    );
+    return;
+  }
+
+  const scratchDemoTarget = new URLSearchParams(location.search).get('scratchDemo');
+  if (scratchDemoTarget) {
+    phaseEl.textContent = 'scratch-demo';
+    document.body.classList.add('table-mode');
+    joinQrEl.style.display = 'none';
+    contentEl.innerHTML = scratchTicketReveal(
+      { title: scratchDemoTarget, name: scratchDemoTarget, category: 'skill' },
+      ROULETTE_OPTION_LABELS.map((title) => ({ title, name: title, category: 'skill' })),
+      true,
+      5600,
+      5
     );
     return;
   }

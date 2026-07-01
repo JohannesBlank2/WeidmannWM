@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Weidmann WM — Display</title>
+  <title>Weidmann WM Poker Edition — Display</title>
   <link rel="stylesheet" href="/shared/style.css" />
   <style>
     body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -149,7 +149,7 @@
       box-shadow: 0 18px 48px rgba(0,0,0,.48), inset 0 0 0 3px rgba(255,209,92,.12);
     }
     .slot-machine::before {
-      content: "WEIDMANN EM"; display: block; margin-bottom: 18px;
+      content: "WEIDMANN WM Poker Edition"; display: block; margin-bottom: 18px;
       color: var(--accent); font-weight: 900; font-size: 1.35rem;
       letter-spacing: .18em; text-shadow: 0 0 16px rgba(255,209,92,.55);
     }
@@ -384,7 +384,7 @@
       min-height: min(760px, 88vh);
       margin: 0 auto;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 20px; text-align: center;
+      gap: 16px; text-align: center;
     }
     .cornhole-reveal.complete,
     .cornhole-reveal.idle {
@@ -406,7 +406,7 @@
     .cornhole-table {
       position: relative;
       width: min(980px, 90vw);
-      min-height: 500px;
+      min-height: 530px;
       padding: 44px 52px 48px;
       border: 8px solid #d8b75a;
       border-radius: 999px;
@@ -423,11 +423,11 @@
       position: relative; z-index: 2;
       display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: clamp(34px, 6vw, 82px);
-      width: min(720px, 78vw);
+      width: min(780px, 80vw);
     }
     .cornhole-slot {
       position: relative;
-      height: 310px;
+      height: 360px;
       border: 2px dashed rgba(244,226,160,.72);
       border-radius: 16px;
       background: rgba(3, 29, 22, .52);
@@ -448,7 +448,7 @@
     }
     .cornhole-card {
       position: relative;
-      width: min(230px, 26vw);
+      width: min(210px, 24vw);
       aspect-ratio: 5 / 7;
       perspective: 1400px;
       transform: translateY(0) rotate(0deg);
@@ -569,8 +569,8 @@
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    /* Deko-Ticker: taeuscht Zufall vor, indem er andere Spieletitel durchlaufen
-       laesst, bevor die Animation auf dem fest vorgegebenen Spiel landet. */
+    /* Deko-Ticker: täuscht Zufall vor, indem er andere Spieletitel durchlaufen
+       lässt, bevor die Animation auf dem fest vorgegebenen Spiel landet. */
     .decoy-ticker {
       width: min(880px, 90vw); overflow: hidden; margin: 0 auto 16px;
       animation: decoy-ticker-fade .3s ease var(--ticker-fade-delay, 3000ms) forwards;
@@ -599,7 +599,316 @@
       to { opacity: 0; height: 0; margin: 0; }
     }
 
-    /* Gluecksrad-Trommel (Price-is-Right-Stil) */
+    /* Rubbelkarten-Reveal */
+    .scratch-reveal {
+      width: min(1180px, 96vw);
+      min-height: min(820px, 94vh);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      text-align: center;
+    }
+    .scratch-reveal.complete {
+      min-height: min(430px, 54vh);
+      gap: 10px;
+    }
+    .scratch-copy {
+      display: grid;
+      gap: 6px;
+      animation: cornhole-copy-in .45s ease both;
+    }
+    .scratch-reveal.complete .scratch-copy { display: none; }
+    .scratch-copy-kicker {
+      color: var(--accent);
+      text-transform: uppercase;
+      font-size: clamp(1.05rem, 1.7vw, 1.45rem);
+      font-weight: 900;
+      text-shadow: 0 0 18px rgba(255,209,92,.28);
+    }
+    .scratch-copy-sub {
+      color: var(--muted);
+      font-size: clamp(1rem, 1.6vw, 1.35rem);
+      font-weight: 800;
+    }
+    .scratch-card-wrap {
+      width: min(980px, 88vw);
+      perspective: 1200px;
+    }
+    .scratch-reveal.complete .scratch-card-wrap {
+      width: min(720px, 82vw);
+    }
+    .scratch-ticket {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 2.05 / 1;
+      overflow: hidden;
+      border: 5px solid #f4d78a;
+      border-radius: 24px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.16), transparent 18% 82%, rgba(255,255,255,.12)),
+        radial-gradient(circle at 18% 28%, rgba(255,209,92,.26), transparent 28%),
+        linear-gradient(145deg, #480814, #a7162e 48%, #250409);
+      box-shadow:
+        0 32px 70px rgba(0,0,0,.55),
+        0 0 38px rgba(255,209,92,.2),
+        inset 0 0 0 2px rgba(255,255,255,.14);
+      transform: rotate(-2deg);
+      animation: scratch-card-in .62s cubic-bezier(.18,.84,.2,1.08) both;
+    }
+    .scratch-reveal.complete .scratch-ticket {
+      transform: rotate(0deg);
+      animation: none;
+      box-shadow: 0 18px 38px rgba(0,0,0,.42), inset 0 0 0 2px rgba(255,255,255,.14);
+    }
+    .scratch-ticket::before {
+      content: "";
+      position: absolute;
+      inset: 16px;
+      border: 2px dashed rgba(255,248,223,.42);
+      border-radius: 17px;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .scratch-ticket::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 24px;
+      width: min(260px, 36%);
+      height: 16px;
+      transform: translateX(-50%);
+      border-top: 2px solid rgba(255,248,223,.42);
+      border-bottom: 2px solid rgba(255,248,223,.22);
+      opacity: .8;
+      pointer-events: none;
+    }
+    .scratch-ticket-label {
+      position: absolute;
+      left: 50%;
+      top: 26px;
+      z-index: 2;
+      transform: translateX(-50%);
+      padding: 8px 22px;
+      border: 1px solid rgba(255,248,223,.38);
+      border-radius: 999px;
+      background: rgba(8,3,5,.45);
+      color: #ffe7a7;
+      font-size: clamp(.8rem, 1.2vw, 1.05rem);
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .scratch-window {
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      top: 25%;
+      bottom: 17%;
+      overflow: hidden;
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at 50% 30%, rgba(255,245,184,.22), transparent 38%),
+        linear-gradient(135deg, #1c050b, #4a0b17 48%, #120306);
+      box-shadow:
+        inset 0 0 34px rgba(0,0,0,.62),
+        0 0 0 2px rgba(255,237,177,.28);
+    }
+    .scratch-prize {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      z-index: 1;
+    }
+    .scratch-prize-kicker,
+    .scratch-prize-title,
+    .scratch-prize-meta {
+      opacity: 0;
+      transform: translateY(14px) scale(.94);
+    }
+    .scratch-reveal.scratching .scratch-prize-kicker,
+    .scratch-reveal.scratching .scratch-prize-title,
+    .scratch-reveal.scratching .scratch-prize-meta {
+      animation: scratch-prize-in .48s cubic-bezier(.18,.84,.2,1.14) var(--scratch-title-delay, 4800ms) forwards;
+    }
+    .scratch-reveal.scratching .scratch-prize-title {
+      animation-duration: .6s;
+      animation-delay: calc(var(--scratch-title-delay, 4800ms) + 80ms);
+    }
+    .scratch-reveal.scratching .scratch-prize-meta {
+      animation-delay: calc(var(--scratch-title-delay, 4800ms) + 180ms);
+    }
+    .scratch-reveal.complete .scratch-prize-kicker,
+    .scratch-reveal.complete .scratch-prize-title,
+    .scratch-reveal.complete .scratch-prize-meta {
+      opacity: 1;
+      transform: none;
+    }
+    .scratch-prize-kicker {
+      color: #ffe7a7;
+      text-transform: uppercase;
+      font-size: clamp(.85rem, 1.25vw, 1.05rem);
+      font-weight: 900;
+    }
+    .scratch-prize-title {
+      margin-top: 7px;
+      color: #fff8df;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: clamp(2.6rem, 6.2vw, 6rem);
+      line-height: .88;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+      text-shadow:
+        0 4px 0 rgba(87, 8, 20, .92),
+        0 0 24px rgba(255,209,92,.44),
+        0 0 46px rgba(255,47,79,.28);
+    }
+    .scratch-prize-meta {
+      margin-top: 6px;
+      color: #f4d78a;
+      font-size: clamp(1rem, 1.9vw, 1.6rem);
+      font-weight: 900;
+    }
+    .scratch-foil {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      overflow: hidden;
+      border-radius: inherit;
+      pointer-events: none;
+      background: transparent;
+    }
+    .scratch-reveal.complete .scratch-foil { display: none; }
+    .scratch-strip {
+      position: absolute;
+      left: -1%;
+      width: 102%;
+      height: 24%;
+      transform: scaleX(1);
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.72), transparent 18% 30%, rgba(255,255,255,.48) 46%, transparent 64%),
+        repeating-linear-gradient(135deg, rgba(255,255,255,.22) 0 3px, transparent 3px 14px),
+        linear-gradient(115deg, #f5f7fb 0%, #8c939e 22%, #e5e8ef 42%, #747b87 63%, #f9fbff 78%, #8d949f 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.62), inset 0 -1px 0 rgba(63,70,80,.28);
+      will-change: transform, opacity;
+    }
+    .scratch-strip.from-left { transform-origin: left center; }
+    .scratch-strip.from-right { transform-origin: right center; }
+    .scratch-reveal.scratching .scratch-strip {
+      animation: scratch-strip-clear var(--strip-duration, 1350ms) cubic-bezier(.16,.76,.2,1) var(--strip-delay, 520ms) forwards;
+    }
+    .scratch-prompt {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(35,41,48,.48);
+      font-size: clamp(1.15rem, 2.8vw, 2.35rem);
+      font-weight: 1000;
+      text-transform: uppercase;
+      text-shadow: 0 1px 0 rgba(255,255,255,.45);
+      z-index: 4;
+    }
+    .scratch-reveal.scratching .scratch-prompt {
+      animation: scratch-prompt-out .28s ease var(--scratch-prompt-delay, 900ms) forwards;
+    }
+    .scratch-reveal.complete .scratch-prompt { display: none; }
+    .scratch-coin {
+      position: absolute;
+      left: 10%;
+      top: 24%;
+      z-index: 7;
+      width: clamp(66px, 8vw, 110px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      opacity: 0;
+      background:
+        radial-gradient(circle at 35% 28%, #fff6bf, #f4bf42 38%, #a56610 68%, #5e3309 100%);
+      border: 5px solid rgba(255,232,154,.96);
+      box-shadow:
+        0 16px 32px rgba(0,0,0,.42),
+        0 0 24px rgba(255,209,92,.44),
+        inset -8px -9px 18px rgba(85,40,6,.45),
+        inset 7px 7px 18px rgba(255,255,255,.28);
+      transform: translate(-50%, -50%) rotate(0deg);
+    }
+    .scratch-coin::before {
+      content: "";
+      position: absolute;
+      inset: 18%;
+      border: 3px solid rgba(104,54,8,.32);
+      border-radius: 50%;
+    }
+    .scratch-coin::after {
+      content: "W";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(76,36,7,.7);
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: clamp(1.8rem, 3.1vw, 3rem);
+      font-weight: 900;
+    }
+    .scratch-reveal.scratching .scratch-coin {
+      animation: scratch-coin-move var(--scratch-duration, 5600ms) cubic-bezier(.18,.72,.18,1) forwards;
+    }
+    .scratch-reveal.complete .scratch-coin { display: none; }
+    .scratch-dust {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      z-index: 6;
+      width: var(--dust-size, 6px);
+      height: var(--dust-size, 6px);
+      border-radius: 50%;
+      opacity: 0;
+      background: rgba(229,232,238,.86);
+      pointer-events: none;
+      box-shadow: 0 0 8px rgba(255,255,255,.28);
+    }
+    .scratch-reveal.scratching .scratch-dust {
+      animation: scratch-dust-pop .72s ease-out var(--dust-delay, 800ms) forwards;
+    }
+    .scratch-reveal.complete .scratch-dust { display: none; }
+    @keyframes scratch-card-in {
+      from { opacity: 0; transform: translateY(70px) rotateX(14deg) rotate(-4deg) scale(.9); }
+      to { opacity: 1; transform: translateY(0) rotateX(0) rotate(-2deg) scale(1); }
+    }
+    @keyframes scratch-strip-clear {
+      0% { opacity: 1; transform: scaleX(1); }
+      82% { opacity: 1; transform: scaleX(.04); }
+      100% { opacity: 0; transform: scaleX(0); }
+    }
+    @keyframes scratch-prompt-out {
+      to { opacity: 0; transform: scale(.94); }
+    }
+    @keyframes scratch-prize-in {
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes scratch-dust-pop {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(.25); }
+      16% { opacity: .92; }
+      100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0); }
+    }
+    @keyframes scratch-coin-move {
+      0% { opacity: 0; left: 10%; top: 24%; transform: translate(-50%, -50%) rotate(-20deg) scale(.82); }
+      6% { opacity: 1; }
+      17% { left: 88%; top: 23%; transform: translate(-50%, -50%) rotate(180deg) scale(1); }
+      26% { left: 82%; top: 37%; transform: translate(-50%, -50%) rotate(280deg) scale(1); }
+      38% { left: 13%; top: 39%; transform: translate(-50%, -50%) rotate(430deg) scale(1); }
+      47% { left: 18%; top: 52%; transform: translate(-50%, -50%) rotate(540deg) scale(1); }
+      60% { left: 88%; top: 52%; transform: translate(-50%, -50%) rotate(710deg) scale(1); }
+      69% { left: 82%; top: 65%; transform: translate(-50%, -50%) rotate(820deg) scale(1); }
+      82% { left: 12%; top: 66%; transform: translate(-50%, -50%) rotate(990deg) scale(1); }
+      91% { left: 20%; top: 78%; transform: translate(-50%, -50%) rotate(1100deg) scale(1); opacity: 1; }
+      100% { left: 103%; top: 78%; transform: translate(-50%, -50%) rotate(1260deg) scale(.74); opacity: 0; }
+    }
+
+    /* Glücksrad-Trommel (Price-is-Right-Stil) */
     .wheel-reveal {
       width: min(900px, 92vw);
       min-height: min(760px, 86vh);
@@ -697,11 +1006,11 @@
     }
     .wheel-face span {
       font-weight: 900;
-      font-size: clamp(1.1rem, 2vw, 1.6rem); padding: 0 14px;
+      font-size: clamp(1rem, 1.75vw, 1.45rem); padding: 0 18px;
       overflow-wrap: anywhere;
     }
     .wheel-result {
-      min-width: min(520px, 70vw);
+      min-width: min(640px, 78vw);
       padding: 18px 28px; border-radius: 8px;
       background: rgba(4, 41, 31, .86);
       border: 1px solid rgba(244,226,160,.42);
@@ -719,8 +1028,9 @@
     .wheel-result b {
       display: block; margin-top: 6px;
       color: #fff8df; font-family: Georgia, 'Times New Roman', serif;
-      font-size: clamp(2.6rem, 5vw, 4.6rem); line-height: .9;
+      font-size: clamp(2.5rem, 4.6vw, 4.3rem); line-height: .9;
       text-shadow: 0 0 20px rgba(244,226,160,.28);
+      overflow-wrap: anywhere;
     }
 
     .roulette-reveal {
@@ -791,8 +1101,8 @@
       letter-spacing: .02em; dominant-baseline: middle;
     }
     .roulette-segment.target text {
-      fill: #fff4a8; font-size: 18px;
-      stroke-width: 4px;
+      fill: #fff8df; font-size: 10px;
+      stroke-width: 3px;
     }
     .roulette-segment.target .roulette-sector {
       fill: #0e5a41;
@@ -963,16 +1273,26 @@
       .bandit-lever { right: -74px; top: 180px; transform: scale(.72); transform-origin: top left; }
       .cornhole-table { min-height: 380px; padding: 38px 28px 32px; border-width: 6px; border-radius: 60px; }
       .cornhole-slots { gap: 18px; width: min(620px, 82vw); }
-      .cornhole-slot { height: 230px; }
-      .cornhole-card { width: min(170px, 34vw); }
+      .cornhole-slot { height: 260px; }
+      .cornhole-card { width: min(150px, 30vw); }
       .cornhole-card-face { border-width: 5px; border-radius: 14px; }
       .cornhole-card-title { font-size: clamp(1.55rem, 4vw, 2.6rem); }
       .cornhole-result { min-width: min(420px, 72vw); padding: 14px 18px; }
       .roulette-stage { width: min(540px, 76vw); }
       .roulette-reveal.complete .roulette-stage { width: min(400px, 76vw); }
       .roulette-segment text { font-size: 8px; stroke-width: 2.8px; }
-      .roulette-segment.target text { font-size: 12px; }
+      .roulette-segment.target text { font-size: 8px; stroke-width: 2.8px; }
       .roulette-result { min-width: min(340px, 70vw); padding: 16px 20px; }
+      .scratch-reveal { min-height: min(660px, 90vh); gap: 12px; }
+      .scratch-card-wrap { width: min(780px, 90vw); }
+      .scratch-reveal.complete .scratch-card-wrap { width: min(620px, 84vw); }
+      .scratch-ticket { border-width: 4px; border-radius: 18px; }
+      .scratch-ticket::before { inset: 11px; border-radius: 13px; }
+      .scratch-ticket-label { top: 18px; padding: 6px 16px; }
+      .scratch-window { top: 29%; bottom: 21%; border-radius: 15px; }
+      .scratch-prize { padding: 16px; }
+      .scratch-prize-title { font-size: clamp(2rem, 7vw, 4.2rem); }
+      .scratch-coin { width: clamp(54px, 9vw, 82px); border-width: 4px; }
     }
 
     footer.scores {
@@ -998,7 +1318,7 @@
 </head>
 <body>
   <header class="bar">
-    <h1>WEIDMANN EM</h1>
+    <h1>WEIDMANN WM Poker Edition</h1>
     <div>
       <span class="phase-pill" id="phase">lobby</span>
       <span class="conn-badge offline" data-conn>getrennt</span>
@@ -1019,7 +1339,7 @@
     <div class="scoreboard" id="scoreboard"></div>
   </footer>
 
-  <!-- Buzzer-Sound (kurzer Beep via WebAudio, kein externes File noetig) -->
+  <!-- Buzzer-Sound (kurzer Beep via WebAudio, kein externes File nötig) -->
   <script src="/socket.io/socket.io.js"></script>
   <script>window.APP_ROLE = 'display';</script>
   <script src="/shared/client.js"></script>

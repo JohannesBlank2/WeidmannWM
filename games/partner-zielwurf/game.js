@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * Pool-Spiel (Platzhalter). Solange built:false, laedt die Auswahl das
+ * Pool-Spiel (Platzhalter). Solange built:false, lädt die Auswahl das
  * Demo-Spiel (buzzer-test) als Platzhalter -> der Ablauf funktioniert komplett.
  *
  * FERTIGSTELLEN: built auf true setzen und in DIESEM Ordner display.js + play.js
- * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp anpassen. Kein Eingriff in den Kern noetig.
+ * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp anpassen. Kein Eingriff in den Kern nötig.
  */
 module.exports = {
   id: 'partner-zielwurf',
@@ -13,7 +13,7 @@ module.exports = {
   category: 'sport',
   title: 'Partner Zielwurf',
   responsiblePerson: 'TBD',
-  description: 'Ein Partner wirft, der andere arbeitet mit einem Zielbehaelter.',
+  description: 'Ein Partner wirft, der andere arbeitet mit einem Zielbehälter.',
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Wurfobjekte', 'Zielkiste'],
   hasBeenPlayed: false,

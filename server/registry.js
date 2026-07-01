@@ -13,9 +13,9 @@ const MODI = ['single', 'group'];
 const DEMO_GAME_ID = 'buzzer-test';
 
 /**
- * Normalisiert das modus-Feld zu einem Array gueltiger Modi.
+ * Normalisiert das modus-Feld zu einem Array gültiger Modi.
  * Erlaubt: 'einzeln' | 'gemeinsam' | 'beide' | Array davon.
- * Fehlt das Feld, gilt das Spiel in BEIDEN Modi (sicherer Default fuer Demo).
+ * Fehlt das Feld, gilt das Spiel in BEIDEN Modi (sicherer Default für Demo).
  */
 function normalizeModus(value) {
   if (value === 'beide' || value == null) return ['single', 'group'];
@@ -97,7 +97,7 @@ class Registry {
 
   _normalize(def, folderName) {
     if (!def || !def.id) {
-      console.warn(`[registry] ${folderName}/game.js hat keine id -> uebersprungen.`);
+      console.warn(`[registry] ${folderName}/game.js hat keine id -> übersprungen.`);
       return null;
     }
     const kategorie = normalizeCategory(def.category || def.kategorie);
@@ -140,7 +140,7 @@ class Registry {
     return this.games.get(id) || null;
   }
 
-  /** Serialisierbare Liste fuer den Admin (ohne Funktions-Hooks). */
+  /** Serialisierbare Liste für den Admin (ohne Funktions-Hooks). */
   list() {
     return Array.from(this.games.values()).map((g) => ({
       id: g.id,
@@ -163,7 +163,7 @@ class Registry {
     }));
   }
 
-  /** Kompakte Meta fuer den State (was Display/Player zum Rendern brauchen). */
+  /** Kompakte Meta für den State (was Display/Player zum Rendern brauchen). */
   meta(id) {
     const g = this.get(id);
     if (!g) return null;
@@ -193,9 +193,9 @@ class Registry {
   }
 
   /**
-   * Neue Auswahl fuer die Einzelspieler-Show: Kategorie reicht, der alte
+   * Neue Auswahl für die Einzelspieler-Show: Kategorie reicht, der alte
    * single/group-Modus wird nicht mehr gefiltert. Echte Spiele sind selectable,
-   * Decoys bleiben im Rad sichtbar, koennen aber nicht ausgelost werden.
+   * Decoys bleiben im Rad sichtbar, können aber nicht ausgelost werden.
    */
   buildSpinChoices(kategorie, consumed = [], options = {}) {
     const category = normalizeCategory(kategorie);
@@ -239,7 +239,7 @@ class Registry {
   }
 
   /**
-   * Spiele zur Auswahl fuer den Pick-Ablauf: passender modus + kategorie,
+   * Spiele zur Auswahl für den Pick-Ablauf: passender modus + kategorie,
    * nicht das Demo, noch nicht verbraucht. Normal 3, weniger falls verbraucht.
    */
   buildChoices(modus, kategorie, consumed = [], options = {}) {
@@ -283,7 +283,7 @@ class Registry {
     );
   }
 
-  /** Rueckwaertskompatibler Alias fuer alten Code. */
+  /** Rückwärtskompatibler Alias für alten Code. */
   availableKategorien(modusOrConsumed, consumedMaybe = []) {
     const consumed = Array.isArray(modusOrConsumed) ? modusOrConsumed : consumedMaybe;
     return this.availableCategories(consumed);

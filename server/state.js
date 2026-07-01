@@ -8,14 +8,14 @@ const STATE_SCHEMA_VERSION = 4;
 
 // Phasen der Show-Statemaschine.
 //   lobby              -> Spieler verbinden sich
-//   runden-uebersicht  -> Runde X wird angekuendigt
-//   kategorie-auswahl  -> alter Fallback: aktueller Spieler waehlt Sport/Skill/Quiz
+//   runden-uebersicht  -> Runde X wird angekündigt
+//   kategorie-auswahl  -> alter Fallback: aktueller Spieler wählt Sport/Skill/Quiz
 //   spin-bereit        -> alter Fallback: drei geloste Spiele stehen bereit
-//   spin-laeuft        -> alter Fallback: TV zeigt den Gluecksrad-/Slot-Spin
+//   spin-laeuft        -> alter Fallback: TV zeigt den Glücksrad-/Slot-Spin
 //   spiel-intro        -> Admin hat eines der festen Show-Spiele vorgestellt
 //   spiel-details      -> ausgelostes Spiel wird angezeigt
 //   wetten             -> Spieler setzen geheim 0..50 Coins auf einen Mitspieler
-//   spiel-aktiv        -> Spiel laeuft
+//   spiel-aktiv        -> Spiel läuft
 //   auswertung         -> Admin setzt Platzierungen und wendet Auszahlung an
 //   finale             -> Show ist durch
 const PHASES = [
@@ -51,7 +51,7 @@ const FEATURED_GAMES = [
   { slot: 2, gameId: 'fehlersuche', title: '2016?', animation: 'roulette', durationMs: 4600 },
   { slot: 3, gameId: 'cornhole', title: 'Cornhole', animation: 'cards', durationMs: 4300 },
   { slot: 4, gameId: 'musik-erraten', title: 'Shazam', animation: 'wheel', durationMs: 5200 },
-  { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', animation: 'reveal', durationMs: 2200 },
+  { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', animation: 'scratch', durationMs: 5600 },
 ];
 const RANK_AWARDS = {
   1: 50,
@@ -125,6 +125,7 @@ function defaultState() {
     gameState: {},
     meta: {
       history: [],
+      featuredGameTitles: {},
     },
   };
 }
@@ -140,7 +141,9 @@ class GameState {
 
   setRegistry(registry) {
     this.registry = registry;
-    if (this._repairRouletteChoices()) {
+    const repairedChoices = this._repairRouletteChoices();
+    const repairedTitles = this._applyFeaturedTitleOverridesToState();
+    if (repairedChoices || repairedTitles) {
       this.saveNow();
     }
   }
@@ -176,7 +179,7 @@ class GameState {
         buzzer: normalizeBuzzer(saved.buzzer),
         round: normalizeRound(saved.round),
         consumedGames: Array.isArray(saved.consumedGames) ? saved.consumedGames : [],
-        meta: { ...base.meta, ...(saved.meta || {}) },
+        meta: normalizeMeta(saved.meta, base.meta),
       };
 
       for (const id of Object.keys(this.state.clients)) {
@@ -264,10 +267,80 @@ class GameState {
       return {
         slot: entry.slot,
         gameId: entry.gameId,
-        title: meta ? meta.title : entry.title,
+        title: this._featuredTitle(entry, meta),
+        defaultTitle: meta ? meta.title : entry.title,
         animation: entry.animation,
       };
     });
+  }
+
+  _featuredTitle(entry, meta) {
+    const titles = (this.state.meta && this.state.meta.featuredGameTitles) || {};
+    const override = titles[String(entry.slot)] || titles[entry.gameId];
+    return override || (meta ? meta.title : entry.title);
+  }
+
+  _withFeaturedTitle(meta, entry) {
+    if (!meta || !entry) return meta;
+    const title = this._featuredTitle(entry, meta);
+    return { ...meta, name: title, title };
+  }
+
+  setFeaturedGameTitle(slot, title) {
+    const featured = FEATURED_GAMES.find((entry) => entry.slot === Number(slot));
+    if (!featured) return false;
+
+    const value = String(title || '').trim().slice(0, 80);
+    this.state.meta.featuredGameTitles = {
+      ...(this.state.meta.featuredGameTitles || {}),
+    };
+
+    if (value) {
+      this.state.meta.featuredGameTitles[String(featured.slot)] = value;
+    } else {
+      delete this.state.meta.featuredGameTitles[String(featured.slot)];
+    }
+
+    const nextTitle = this._featuredTitle(featured, this.registry && this.registry.meta(featured.gameId));
+    const applyTitle = (game) => {
+      if (!game || game.id !== featured.gameId) return game;
+      return { ...game, name: nextTitle, title: nextTitle };
+    };
+
+    this.state.round.selectedGame = applyTitle(this.state.round.selectedGame);
+    this.state.round.choices = (this.state.round.choices || []).map((choice) => {
+      const id = choice.gameId || choice.id;
+      return id === featured.gameId ? { ...choice, name: nextTitle, title: nextTitle } : choice;
+    });
+    this.state.activeGame = applyTitle(this.state.activeGame);
+
+    this.touch();
+    return true;
+  }
+
+  _applyFeaturedTitleOverridesToState() {
+    let changed = false;
+
+    for (const featured of FEATURED_GAMES) {
+      const nextTitle = this._featuredTitle(featured, this.registry && this.registry.meta(featured.gameId));
+      const applyTitle = (game) => {
+        if (!game || game.id !== featured.gameId) return game;
+        if (game.title === nextTitle && game.name === nextTitle) return game;
+        changed = true;
+        return { ...game, name: nextTitle, title: nextTitle };
+      };
+
+      this.state.round.selectedGame = applyTitle(this.state.round.selectedGame);
+      this.state.activeGame = applyTitle(this.state.activeGame);
+      this.state.round.choices = (this.state.round.choices || []).map((choice) => {
+        const id = choice.gameId || choice.id;
+        if (id !== featured.gameId || (choice.title === nextTitle && choice.name === nextTitle)) return choice;
+        changed = true;
+        return { ...choice, name: nextTitle, title: nextTitle };
+      });
+    }
+
+    return changed;
   }
 
   _gamePoolChoices() {
@@ -277,7 +350,7 @@ class GameState {
         .pool()
         .filter(Boolean)
         .map((meta) => ({
-          ...meta,
+          ...this._withFeaturedTitle(meta, FEATURED_GAMES.find((entry) => entry.gameId === meta.id)),
           gameId: meta.id,
           selectable: true,
           hasBeenPlayed: this.state.consumedGames.includes(meta.id),
@@ -630,7 +703,7 @@ class GameState {
   }
 
   /**
-   * Schritt 1: Show-Spiel fuer einen Slot vormerken. Die TV-Ansicht zeigt nur
+   * Schritt 1: Show-Spiel für einen Slot vormerken. Die TV-Ansicht zeigt nur
    * einen neutralen "Bereit"-Screen, das eigentliche Spiel bleibt verdeckt, bis
    * der Admin die Animation explizit startet (startFeaturedIntro).
    */
@@ -638,12 +711,12 @@ class GameState {
     if (!this.registry) return false;
     const featured = FEATURED_GAMES.find((entry) => entry.slot === Number(slot));
     if (!featured) return false;
-    const game = this.registry.meta(featured.gameId);
+    const game = this._withFeaturedTitle(this.registry.meta(featured.gameId), featured);
     if (!game) return false;
 
     // Alle Animationen (nicht nur Roulette) ziehen ihre Deko-Kandidaten aus dem
-    // vollen Spiele-Pool, damit die Auslosung optisch zufaellig aussieht, auch
-    // wenn das tatsaechliche Show-Spiel fest vorgegeben ist.
+    // vollen Spiele-Pool, damit die Auslosung optisch zufällig aussieht, auch
+    // wenn das tatsächliche Show-Spiel fest vorgegeben ist.
     const choices = this._gamePoolChoices();
 
     this._clearSpinTimer();
@@ -676,7 +749,7 @@ class GameState {
   }
 
   /**
-   * Schritt 2: Die vorbereitete Animation tatsaechlich abspielen. Es gibt
+   * Schritt 2: Die vorbereitete Animation tatsächlich abspielen. Es gibt
    * bewusst keinen Auto-Timer mehr auf einen Folgephase-Wechsel - der Admin
    * entscheidet per finishFeaturedIntro() (Schritt 3), wann es weitergeht.
    */
@@ -822,10 +895,12 @@ class GameState {
       gameScore: 0,
     }));
     const clients = this.state.clients;
+    const meta = this.state.meta;
     this._clearSpinTimer();
     this.state = defaultState();
     this.state.players = players;
     this.state.clients = clients;
+    this.state.meta = normalizeMeta(meta, this.state.meta);
     this.touch();
   }
 
@@ -984,6 +1059,24 @@ function buildSpinSequence(choices, winnerIndex) {
   }
   sequence.push({ ...choices[winnerIndex], spinIndex: sequence.length, winner: true });
   return sequence;
+}
+
+function normalizeMeta(meta, baseMeta = { history: [], featuredGameTitles: {} }) {
+  const featuredGameTitles = {};
+  const savedTitles = meta && typeof meta.featuredGameTitles === 'object'
+    ? meta.featuredGameTitles
+    : {};
+
+  for (const [key, value] of Object.entries(savedTitles)) {
+    const title = String(value || '').trim().slice(0, 80);
+    if (title) featuredGameTitles[key] = title;
+  }
+
+  return {
+    ...baseMeta,
+    ...(meta || {}),
+    featuredGameTitles,
+  };
 }
 
 function shuffle(items) {

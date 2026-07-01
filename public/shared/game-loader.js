@@ -8,17 +8,17 @@
  *   {
  *     mount(container, ctx)   // einmal beim Start: DOM aufbauen
  *     update(state, ctx)      // bei jedem State-Update
- *     unmount(container, ctx) // beim Wechsel/Stop: aufraeumen
+ *     unmount(container, ctx) // beim Wechsel/Stop: aufräumen
  *   }
  *
  * ctx = { socket, clientId, role, view, sendAction(action) }
  *
- * Der Loader laedt die passende JS-Datei dynamisch nach, sobald ein Spiel
+ * Der Loader lädt die passende JS-Datei dynamisch nach, sobald ein Spiel
  * aktiv wird -> der Kern muss neue Spiele nicht kennen.
  */
 (function () {
   const modules = new Map();      // id -> moduleDef
-  const loadedScripts = new Set(); // bereits eingehaengte script-URLs
+  const loadedScripts = new Set(); // bereits eingehängte script-URLs
 
   window.GameRegistry = {
     register(id, def) {
@@ -41,7 +41,7 @@
   }
 
   /**
-   * Verwaltet das aktive Spiel-Modul fuer eine Ansicht (display oder play).
+   * Verwaltet das aktive Spiel-Modul für eine Ansicht (display oder play).
    * Wird mit dem Container-Element und dem ctx erzeugt.
    */
   window.createGameHost = function (container, ctx) {
@@ -51,7 +51,7 @@
     async function ensure(activeGame) {
       const id = activeGame ? activeGame.id : null;
 
-      // Spielwechsel oder Spiel-Ende -> altes Modul aufraeumen.
+      // Spielwechsel oder Spiel-Ende -> altes Modul aufräumen.
       if (currentId !== id) {
         if (currentDef && currentDef.unmount) {
           try { currentDef.unmount(container, ctx); } catch (e) { console.error(e); }

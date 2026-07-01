@@ -12,11 +12,11 @@
   const clientsEl = document.getElementById('clients');
 
   const DEFAULT_FEATURED_GAMES = [
-    { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', animation: 'slot' },
-    { slot: 2, gameId: 'fehlersuche', title: '2016?', animation: 'roulette' },
-    { slot: 3, gameId: 'cornhole', title: 'Cornhole', animation: 'cards' },
-    { slot: 4, gameId: 'musik-erraten', title: 'Shazam', animation: 'reveal' },
-    { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', animation: 'reveal' },
+    { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', defaultTitle: 'Halbe Sache', animation: 'slot' },
+    { slot: 2, gameId: 'fehlersuche', title: '2016?', defaultTitle: '2016?', animation: 'roulette' },
+    { slot: 3, gameId: 'cornhole', title: 'Cornhole', defaultTitle: 'Cornhole', animation: 'cards' },
+    { slot: 4, gameId: 'musik-erraten', title: 'Shazam', defaultTitle: 'Shazam', animation: 'wheel' },
+    { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', defaultTitle: 'How much is the fish', animation: 'scratch' },
   ];
 
   let games = [];
@@ -94,7 +94,7 @@
         '<div class="lbl">Vorbereitet (auf dem TV noch verdeckt):</div>' +
         `<div class="game-detail">
           <h3>${esc(game ? game.title || game.name : 'Show-Spiel')}</h3>
-          <div class="muted">${introLabel(intro)} bereit zum Start.</div>
+          <div class="muted">${introLabel(intro, game)} bereit zum Start.</div>
         </div>` +
         '<div class="row" style="margin-top:10px;">' +
         '<button class="good bigbtn" data-start-featured-intro>▶ Animation starten</button>' +
@@ -108,10 +108,10 @@
       '<div class="lbl">Spiel wird vorgestellt:</div>' +
       `<div class="game-detail">
         <h3>${esc(game ? game.title || game.name : 'Show-Spiel')}</h3>
-        <div class="muted">${introLabel(intro)} laeuft auf dem TV.</div>
+        <div class="muted">${introLabel(intro, game)} läuft auf dem TV.</div>
       </div>` +
       '<div class="row" style="margin-top:10px;">' +
-      '<button class="good bigbtn" data-finish-featured-intro>Weiter zur Uebersicht</button>' +
+      '<button class="good bigbtn" data-finish-featured-intro>Weiter zur Übersicht</button>' +
       '</div>';
     pickerArea.querySelector('[data-finish-featured-intro]').onclick = () =>
       App.socket.emit('admin:finish-featured-intro');
@@ -120,7 +120,7 @@
   function renderCategoryPick(round) {
     const categories = round.availableCategories || [];
     pickerArea.innerHTML =
-      '<div class="lbl">Kategorie stellvertretend waehlen:</div><div class="row">' +
+      '<div class="lbl">Kategorie stellvertretend wählen:</div><div class="row">' +
       categories.map((k) => `<button data-pickkat="${k}">${categoryLabel(k)}</button>`).join('') +
       '</div>' +
       (!categories.length
@@ -138,7 +138,7 @@
       choicesHtml(round.choices || []) +
       '<div class="row" style="margin-top:10px;">' +
       '<button class="good" data-start-spin>Spin starten</button>' +
-      '<button data-backcat>Zurueck zur Kategorie-Auswahl</button>' +
+      '<button data-backcat>Zurück zur Kategorie-Auswahl</button>' +
       '</div>';
     pickerArea.querySelector('[data-start-spin]').onclick = () => App.socket.emit('admin:start-spin');
     pickerArea.querySelector('[data-backcat]').onclick = () => App.socket.emit('admin:back-to-categories');
@@ -147,10 +147,10 @@
   function renderSpinRunning(round) {
     const spin = round.spin || {};
     pickerArea.innerHTML =
-      '<div class="lbl">Spin laeuft:</div>' +
+      '<div class="lbl">Spin läuft:</div>' +
       choicesHtml(round.choices || []) +
       `<div class="muted" style="margin-top:8px;">Gewinner wird nach ${Math.round((spin.durationMs || 0) / 1000)}s angezeigt.</div>` +
-      '<div class="row" style="margin-top:10px;"><button data-finish-spin>Sofort aufloesen</button></div>';
+      '<div class="row" style="margin-top:10px;"><button data-finish-spin>Sofort auflösen</button></div>';
     pickerArea.querySelector('[data-finish-spin]').onclick = () => App.socket.emit('admin:finish-spin');
   }
 
@@ -159,7 +159,7 @@
       gameDetails(round.selectedGame) +
       '<div class="row" style="margin-top:10px;">' +
       '<button class="good" data-start-picked>Spiel starten</button>' +
-      '<button data-backcat>Zurueck zur Kategorie-Auswahl</button>' +
+      '<button data-backcat>Zurück zur Kategorie-Auswahl</button>' +
       '</div>';
     pickerArea.querySelector('[data-start-picked]').onclick = () => App.socket.emit('admin:start-picked-game');
     pickerArea.querySelector('[data-backcat]').onclick = () => App.socket.emit('admin:back-to-categories');
@@ -172,8 +172,8 @@
     pickerArea.innerHTML =
       gameDetails(round.selectedGame) +
       `<div class="game-detail" style="margin-top:10px;">
-        <b>Geheime Einsaetze</b>
-        <div class="muted">${betCount}/${betTotal} Spielern haben gesetzt. Nicht gesetzte Einsaetze zaehlen als 0.</div>
+        <b>Geheime Einsätze</b>
+        <div class="muted">${betCount}/${betTotal} Spielern haben gesetzt. Nicht gesetzte Einsätze zählen als 0.</div>
         <div class="spin-admin-list">${state.players.map((p) => {
           const status = (round.betStatus || []).find((entry) => entry.playerId === p.id);
           return `<div class="game-detail mini"><b style="color:${p.color}">${esc(p.name)}</b> ${status && status.submitted ? 'gesetzt' : 'offen'}</div>`;
@@ -181,7 +181,7 @@
       </div>` +
       '<div class="row" style="margin-top:10px;">' +
       '<button class="good" data-start-picked>Spiel starten</button>' +
-      '<button data-backcat>Zurueck zur Kategorie-Auswahl</button>' +
+      '<button data-backcat>Zurück zur Kategorie-Auswahl</button>' +
       '</div>';
     pickerArea.querySelector('[data-start-picked]').onclick = () => App.socket.emit('admin:start-picked-game');
     pickerArea.querySelector('[data-backcat]').onclick = () => App.socket.emit('admin:back-to-categories');
@@ -193,7 +193,7 @@
     const complete = state.players.every((p) => placements[p.id] != null);
     pickerArea.innerHTML =
       `<div class="lbl">Auswertung: ${round.selectedGame ? esc(round.selectedGame.title || round.selectedGame.name) : 'Spiel'}</div>` +
-      '<div class="muted" style="margin-bottom:8px;">Platzpunkte: 1.=50, 2.=40, 3.=30, 4.=20, 5.=10. Danach werden die geheimen Einsaetze verrechnet.</div>' +
+      '<div class="muted" style="margin-bottom:8px;">Platzpunkte: 1.=50, 2.=40, 3.=30, 4.=20, 5.=10. Danach werden die geheimen Einsätze verrechnet.</div>' +
       '<div class="spin-admin-list">' +
       state.players.map((p) => placementRow(p, placements[p.id])).join('') +
       '</div>' +
@@ -328,7 +328,7 @@
           <div class="mt">${categoryLabel(g.category)} &middot; ${g.interaktionstyp}${g.built === false ? ' &middot; Platzhalter' : ''}</div>
         </div>
         <button class="${activeId === g.id ? 'good' : 'primary'}" data-start="${g.id}">
-          ${activeId === g.id ? 'laeuft' : 'Starten'}
+          ${activeId === g.id ? 'läuft' : 'Starten'}
         </button>
       </div>`)
         .join('') || '<div class="muted">Keine Spiele registriert.</div>';
@@ -341,19 +341,43 @@
   function renderFeaturedGames(state) {
     const currentGameId = state.round && state.round.gameId;
     const introRunning = state.phase === 'spiel-intro';
+    const titleOverrides = state.meta && state.meta.featuredGameTitles
+      ? state.meta.featuredGameTitles
+      : {};
     featuredGamesEl.innerHTML =
       '<div class="lbl">Feste Show-Spiele:</div>' +
       featuredGames
         .map((game) => {
           const isCurrent = currentGameId === game.gameId &&
             ['spiel-intro', 'wetten', 'spiel-aktiv', 'auswertung'].includes(state.phase);
+          const title = titleOverrides[String(game.slot)] || titleOverrides[game.gameId] || game.defaultTitle || game.title;
           return `
-            <button class="featured-game-btn ${isCurrent ? 'primary' : ''}" data-featured-slot="${game.slot}">
-              <span>Spiel ${game.slot}: ${esc(game.title)}</span>
-              <span class="meta">Anzeigen &middot; ${animationLabel(game.animation)}</span>
-            </button>`;
+            <div class="featured-game-row ${isCurrent ? 'current' : ''}">
+              <div class="featured-game-title">
+                <label for="featured-title-${game.slot}">Spiel ${game.slot}</label>
+                <input id="featured-title-${game.slot}" type="text" value="${esc(title)}"
+                  maxlength="80" data-featured-title="${game.slot}" />
+              </div>
+              <button class="featured-game-action ${isCurrent ? 'primary' : ''}" data-featured-slot="${game.slot}">
+                Anzeigen
+              </button>
+              <div class="featured-game-meta">${animationLabel(game.animation)} &middot; ${esc(game.gameId)}</div>
+            </div>`;
         })
         .join('');
+
+    featuredGamesEl.querySelectorAll('[data-featured-title]').forEach((input) => {
+      input.onchange = () =>
+        App.socket.emit('admin:set-featured-title', {
+          slot: Number(input.dataset.featuredTitle),
+          title: input.value,
+        });
+      input.onkeydown = (event) => {
+        if (event.key === 'Enter') {
+          input.blur();
+        }
+      };
+    });
 
     featuredGamesEl.querySelectorAll('[data-featured-slot]').forEach((btn) => {
       btn.disabled = introRunning;
@@ -363,7 +387,7 @@
   }
 
   document.getElementById('reset-all').onclick = () => {
-    if (confirm('Wirklich ALLE Coins und den Ablauf zuruecksetzen? (Spielernamen bleiben)')) {
+    if (confirm('Wirklich ALLE Coins und den Ablauf zurücksetzen? (Spielernamen bleiben)')) {
       App.socket.emit('admin:reset-all');
     }
   };
@@ -424,11 +448,12 @@
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
   }
 
-  function introLabel(intro) {
+  function introLabel(intro, game) {
     if (!intro) return 'Animation';
+    if (intro.animation === 'scratch' || (intro.animation === 'reveal' && game && game.id === 'einkauf-schaetzen')) return 'Rubbelkarte';
     if (intro.animation === 'roulette') return 'Roulette';
     if (intro.animation === 'cards') return 'Poker-Karten';
-    if (intro.animation === 'wheel') return 'Gluecksrad';
+    if (intro.animation === 'wheel') return 'Glücksrad';
     return intro.animation === 'slot' ? 'Einarmiger Bandit' : 'Spiel-Reveal';
   }
 
@@ -436,7 +461,8 @@
     if (animation === 'slot') return 'Einarmiger Bandit';
     if (animation === 'roulette') return 'Roulette';
     if (animation === 'cards') return 'Poker-Karten';
-    if (animation === 'wheel') return 'Gluecksrad';
+    if (animation === 'wheel') return 'Glücksrad';
+    if (animation === 'scratch') return 'Rubbelkarte';
     return 'Reveal';
   }
 

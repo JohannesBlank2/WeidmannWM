@@ -43,12 +43,32 @@
     .game-item .info .mt { color: var(--muted); font-size: .85rem; }
     .bigbtn { flex: 1; padding: 16px; font-size: 1.05rem; font-weight: 700; }
     .featured-games { display: grid; gap: 8px; margin-top: 12px; }
-    .featured-game-btn {
-      width: 100%; text-align: left; display: flex; justify-content: space-between;
-      align-items: center; gap: 12px; padding: 14px 16px; font-weight: 800;
+    .featured-game-row {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch;
+      padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+      background: rgba(18, 7, 10, .45);
     }
-    .featured-game-btn .meta { color: var(--muted); font-size: .8rem; font-weight: 700; }
-    .featured-game-btn.primary .meta { color: rgba(36,17,4,.68); }
+    .featured-game-row.current {
+      border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.2) inset;
+    }
+    .featured-game-title {
+      display: grid; gap: 5px; min-width: 0;
+    }
+    .featured-game-title label {
+      color: var(--muted); font-size: .78rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .featured-game-title input {
+      width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 8px; padding: 9px 10px; font: inherit; font-weight: 800;
+    }
+    .featured-game-row.current .featured-game-title input { border-color: var(--accent); }
+    .featured-game-action {
+      min-width: 118px; font-weight: 800;
+    }
+    .featured-game-meta {
+      grid-column: 1 / -1; color: var(--muted); font-size: .8rem; font-weight: 700;
+    }
     .spin-admin-list { display: grid; gap: 8px; margin-top: 8px; }
     .game-detail.mini { padding: 10px 12px; }
   </style>
@@ -80,7 +100,7 @@
     <h2>Buzzer <span class="muted" id="buzz-state" style="font-size:.85rem"></span></h2>
     <div class="row">
       <button class="bigbtn good" data-buzz="arm">🟢 Freigeben</button>
-      <button class="bigbtn" data-buzz="reset">🔄 Zuruecksetzen</button>
+      <button class="bigbtn" data-buzz="reset">🔄 Zurücksetzen</button>
       <button class="bigbtn bad" data-buzz="lock">🔴 Sperren</button>
     </div>
     <div id="buzz-order" class="muted" style="margin-top:10px;"></div>
@@ -90,7 +110,7 @@
   <section class="card">
     <h2>Spieler · Coins</h2>
     <div class="muted" style="font-size:.82rem; margin-bottom:6px;">
-      <b>Coins</b> = Gesamtstand (+1/-1) · <b>Spiel</b> = Platzpunkte fuer die laufende Auswertung
+      <b>Coins</b> = Gesamtstand (+1/-1) · <b>Spiel</b> = Platzpunkte für die laufende Auswertung
     </div>
     <div id="players"></div>
     <div class="row" style="margin-top:10px;">
@@ -105,16 +125,16 @@
     <div id="games"></div>
   </section>
 
-  <!-- Verbundene Geraete -->
+  <!-- Verbundene Geräte -->
   <section class="card">
-    <h2>Verbundene Geraete</h2>
+    <h2>Verbundene Geräte</h2>
     <div class="clients" id="clients" style="font-size:.9rem;"></div>
   </section>
 
   <!-- Gefahrenzone -->
   <section class="card">
-    <h2>Zuruecksetzen</h2>
-    <button class="bad" id="reset-all">⚠️ Alles zuruecksetzen (Coins & Ablauf)</button>
+    <h2>Zurücksetzen</h2>
+    <button class="bad" id="reset-all">⚠️ Alles zurücksetzen (Coins & Ablauf)</button>
   </section>
 
   <script src="/socket.io/socket.io.js"></script>

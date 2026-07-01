@@ -35,10 +35,10 @@ app.use('/admin', express.static(path.join(ROOT, 'public', 'admin')));
 app.use('/games', express.static(path.join(ROOT, 'games')));
 app.use('/assets', express.static(path.join(ROOT, 'assets')));
 
-// REST: Liste der registrierten Spiele (fuer Admin, falls ohne Socket gebraucht).
+// REST: Liste der registrierten Spiele (für Admin, falls ohne Socket gebraucht).
 app.get('/api/games', (req, res) => res.json(registry.list()));
 
-// QR-Code als PNG (data wird per Query uebergeben).
+// QR-Code als PNG (data wird per Query übergeben).
 app.get('/qr', async (req, res) => {
   const data = String(req.query.data || '');
   if (!data) return res.status(400).send('missing data');
@@ -51,7 +51,7 @@ app.get('/qr', async (req, res) => {
   }
 });
 
-// Startseite: Uebersicht + QR-Codes fuer /play und /admin.
+// Startseite: Übersicht + QR-Codes für /play und /admin.
 app.get('/', (req, res) => {
   res.sendFile(path.join(ROOT, 'public', 'index.html'));
 });
@@ -60,7 +60,7 @@ app.get('/', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
-  // Socket.IO macht automatischen Reconnect; grosszuegige Timeouts fuer Handy-Standby.
+  // Socket.IO macht automatischen Reconnect; großzügige Timeouts für Handy-Standby.
   pingTimeout: 30000,
   pingInterval: 10000,
 });
@@ -81,7 +81,7 @@ server.listen(PORT, '0.0.0.0', async () => {
 
   /* eslint-disable no-console */
   console.log('\n========================================================');
-  console.log('   WEIDMANN WM  -  Spieleshow Server laeuft');
+  console.log('   WEIDMANN WM Poker Edition  -  Spieleshow Server läuft');
   console.log('========================================================');
   console.log(`   Lokale IP : ${ip}`);
   console.log(`   Port      : ${PORT}`);
@@ -92,14 +92,14 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log(`   ADMIN      : ${urls.admin}     (Steuerung)`);
   console.log('--------------------------------------------------------');
 
-  // QR-Codes direkt im Terminal (zum Abscannen mit Handy oder Admin-Geraet).
+  // QR-Codes direkt im Terminal (zum Abscannen mit Handy oder Admin-Gerät).
   try {
     console.log('\n   QR  ->  HANDY-SPIELER  (' + urls.play + ')\n');
     console.log(await QRCode.toString(urls.play, { type: 'terminal', small: true }));
     console.log('\n   QR  ->  ADMIN    (' + urls.admin + ')\n');
     console.log(await QRCode.toString(urls.admin, { type: 'terminal', small: true }));
   } catch (err) {
-    console.log('   (QR-Code-Erzeugung uebersprungen: ' + err.message + ')');
+    console.log('   (QR-Code-Erzeugung übersprungen: ' + err.message + ')');
   }
 
   console.log('========================================================');
@@ -113,7 +113,7 @@ function shutdown() {
   console.log('\n[server] Beende, speichere State ...');
   gameState.saveNow();
   server.close(() => process.exit(0));
-  // Falls close haengt, hart nach 1.5s.
+  // Falls close hängt, hart nach 1.5s.
   setTimeout(() => process.exit(0), 1500);
 }
 

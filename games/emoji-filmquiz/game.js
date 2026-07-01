@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * Pool-Spiel (Platzhalter). Solange built:false, laedt die Auswahl das
+ * Pool-Spiel (Platzhalter). Solange built:false, lädt die Auswahl das
  * Demo-Spiel (buzzer-test) als Platzhalter -> der Ablauf funktioniert komplett.
  *
  * FERTIGSTELLEN: built auf true setzen und in DIESEM Ordner display.js + play.js
  * anlegen (siehe games/buzzer-test/ als Vorlage). Optional interaktionstyp/
- * interaktionstyp anpassen. Kein Eingriff in den Kern noetig.
+ * interaktionstyp anpassen. Kein Eingriff in den Kern nötig.
  */
 module.exports = {
   id: 'emoji-filmquiz',
@@ -14,9 +14,9 @@ module.exports = {
   category: 'quiz',
   title: 'Emoji Filmquiz',
   responsiblePerson: 'TBD',
-  description: 'Mehrere Filmtitel werden nur durch Emojis dargestellt. Die Spieler muessen erraten, welcher Film gemeint ist.',
+  description: 'Mehrere Filmtitel werden nur durch Emojis dargestellt. Die Spieler müssen erraten, welcher Film gemeint ist.',
   rules: 'Spieler nennen oder buzzern den gesuchten Filmtitel. Die genaue Wertung wird beim Ausbau des Spiels festgelegt.',
-  materials: ['Emoji-Filmraetsel', 'Loesungsliste'],
+  materials: ['Emoji-Filmrätsel', 'Lösungsliste'],
   hasBeenPlayed: false,
   interaktionstyp: 'keine',
   built: false,

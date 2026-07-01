@@ -17,7 +17,7 @@ if errorlevel 1 (
 )
 
 if not exist "node_modules" (
-  echo [setup] node_modules fehlt - installiere Abhaengigkeiten ...
+  echo [setup] node_modules fehlt - installiere Abhängigkeiten ...
   call npm install
   if errorlevel 1 (
     echo [FEHLER] npm install fehlgeschlagen.
@@ -29,7 +29,7 @@ if not exist "node_modules" (
 echo [start] Server startet ...
 echo.
 
-REM Browser fuer Display und Admin nach kurzer Verzoegerung oeffnen (optional).
+REM Browser für Display und Admin nach kurzer Verzögerung öffnen (optional).
 start "" /min cmd /c "timeout /t 2 >nul & start http://localhost:3000/display/ & start http://localhost:3000/admin/"
 
 node server\index.js

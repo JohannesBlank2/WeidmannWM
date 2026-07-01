@@ -1,5 +1,5 @@
 /* Demo-/Platzhalter-Modul — Display (TV/Beamer).
- * Wird fuer ALLE built:false-Spiele geladen und zeigt deren Namen dynamisch.
+ * Wird für ALLE built:false-Spiele geladen und zeigt deren Namen dynamisch.
  * Beweist den End-to-End-Ablauf inkl. zentralem Buzzer.
  */
 GameRegistry.register('buzzer-test', {
@@ -29,7 +29,7 @@ GameRegistry.register('buzzer-test', {
     const map = {
       locked: ['🔒 gesperrt', '#8b95a7'],
       armed: ['🟢 FREI — buzzern!', '#ffd60a'],
-      resolved: ['Aufgeloest', '#8b95a7'],
+      resolved: ['Aufgelöst', '#8b95a7'],
     };
     const [txt, col] = map[state.buzzer.status] || ['—', '#fff'];
     statusEl.textContent = txt;

@@ -5,8 +5,8 @@
  *
  * Der komplette State wird per 'state' an alle Clients gebroadcastet.
  * Admin, Handy und TV rendern daraus ihre jeweilige Sicht. Spielmodule
- * bekommen optionale Hooks ueber ctx und koennen weiterhin eigene Aktionen
- * senden, ohne den Kern anfassen zu muessen.
+ * bekommen optionale Hooks über ctx und können weiterhin eigene Aktionen
+ * senden, ohne den Kern anfassen zu müssen.
  */
 function attachSockets(io, gameState, registry) {
   gameState.setOnChange((state) => {
@@ -81,7 +81,7 @@ function attachSockets(io, gameState, registry) {
       gameState.joinPlayer(clientId, playerId);
     });
 
-    // Alias fuer alte Clients waehrend der Migration.
+    // Alias für alte Clients während der Migration.
     socket.on('join-team', ({ teamId } = {}) => {
       if (!clientId) return;
       gameState.joinPlayer(clientId, legacyTeamIdToPlayerId(teamId));
@@ -177,6 +177,9 @@ function attachSockets(io, gameState, registry) {
       runActiveGameHook('onStop');
       gameState.prepareFeaturedGame(slot);
     });
+
+    socket.on('admin:set-featured-title', ({ slot, title } = {}) =>
+      gameState.setFeaturedGameTitle(slot, title));
 
     socket.on('admin:start-featured-intro', () => gameState.startFeaturedIntro());
     socket.on('admin:finish-featured-intro', () => gameState.finishFeaturedIntro());

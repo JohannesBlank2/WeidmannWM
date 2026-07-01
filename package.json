@@ -1,7 +1,7 @@
 {
   "name": "weidmann-wm",
   "version": "1.0.0",
-  "description": "Lokale Spieleshow-App fuer 5 Einzelspieler mit Kategorie-Spin",
+  "description": "Lokale Spieleshow-App für 5 Einzelspieler mit Kategorie-Spin - Poker Edition",
   "main": "server/index.js",
   "type": "commonjs",
   "scripts": {

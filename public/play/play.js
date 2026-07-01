@@ -1,4 +1,4 @@
-/* Handy-Ansicht: Spieler waehlen, Einsaetze/Buzzer nutzen, Spielcontent sehen. */
+/* Handy-Ansicht: Spieler wählen, Einsätze/Buzzer nutzen, Spielcontent sehen. */
 (function () {
   const whoEl = document.getElementById('who');
   const playerSelect = document.getElementById('player-select');
@@ -45,13 +45,13 @@
     if (state.phase === 'runden-uebersicht') {
       pickArea.innerHTML = waiting(
         `Runde ${r.number}/${r.total}`,
-        'Admin stellt gleich das naechste Spiel vor.'
+        'Admin stellt gleich das nächste Spiel vor.'
       );
       return;
     }
 
     if (state.phase === 'kategorie-auswahl') {
-      pickArea.innerHTML = waiting('Spielauswahl', 'Admin waehlt das naechste Show-Spiel.');
+      pickArea.innerHTML = waiting('Spielauswahl', 'Admin wählt das nächste Show-Spiel.');
       return;
     }
 
@@ -65,7 +65,7 @@
 
     if (state.phase === 'spin-laeuft') {
       pickArea.innerHTML =
-        waiting('Spin laeuft auf dem TV ...', 'Das Spiel wird gerade ausgelost.') +
+        waiting('Spin läuft auf dem TV ...', 'Das Spiel wird gerade ausgelost.') +
         spinChoiceList(r);
       return;
     }
@@ -145,7 +145,7 @@
   function bettingHtml(state, myPlayerId) {
     const round = state.round || {};
     const player = state.players.find((p) => p.id === myPlayerId);
-    if (!player) return waiting('Spieler waehlen', '');
+    if (!player) return waiting('Spieler wählen', '');
 
     const myBet = round.bets && round.bets[myPlayerId] && round.bets[myPlayerId].amount != null
       ? round.bets[myPlayerId]
@@ -211,7 +211,7 @@
       buzzStatus.textContent = myPress.order === 1 ? 'Du warst zuerst!' : `Platz ${myPress.order}`;
       buzzStatus.style.color = myPress.order === 1 ? 'var(--good)' : 'var(--text)';
     } else if (isArmed) {
-      buzzStatus.textContent = 'JETZT! Drueck den Buzzer!';
+      buzzStatus.textContent = 'JETZT! Drück den Buzzer!';
       buzzStatus.style.color = 'var(--accent)';
     } else {
       buzzStatus.textContent = '-';
@@ -228,7 +228,7 @@
     const myPlayerId = me && me.playerId;
     const player = myPlayerId && state.players.find((p) => p.id === myPlayerId);
 
-    whoEl.textContent = player ? `${player.name} - ${player.score} Coins` : 'Spieler waehlen';
+    whoEl.textContent = player ? `${player.name} - ${player.score} Coins` : 'Spieler wählen';
     whoEl.style.color = player ? player.color : '';
 
     renderPlayers(state);

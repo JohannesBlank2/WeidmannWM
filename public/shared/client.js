@@ -1,5 +1,5 @@
-/* Gemeinsamer Client-Kern fuer alle drei Ansichten.
- * - Stabile clientId in localStorage (ueberlebt Reload & Standby -> Reconnect).
+/* Gemeinsamer Client-Kern für alle drei Ansichten.
+ * - Stabile clientId in localStorage (überlebt Reload & Standby -> Reconnect).
  * - Socket.IO-Verbindung mit Auto-Reconnect.
  * - Einheitliches State-Handling: window.App.onState(cb).
  */
@@ -15,7 +15,7 @@
     return id;
   }
 
-  // role wird vom jeweiligen HTML gesetzt (window.APP_ROLE) bevor dies laedt.
+  // role wird vom jeweiligen HTML gesetzt (window.APP_ROLE) bevor dies lädt.
   const role = window.APP_ROLE || 'play';
   const clientId = getClientId();
 
