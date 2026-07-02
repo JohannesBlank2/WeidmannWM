@@ -53,6 +53,19 @@ function attachSockets(io, gameState, registry) {
     return payload.playerId || legacyTeamIdToPlayerId(payload.teamId);
   }
 
+  function visibleAdminGames() {
+    const featured = gameState.featuredGames();
+    const allowedGameIds = new Set(featured.map((entry) => entry.gameId));
+
+    // WO LIEGT WAS? ist ein Test-/Sondermodul und soll in der Admin-Direktstartliste
+    // weiterhin erreichbar bleiben, auch wenn es kein fester Animationsslot ist.
+    allowedGameIds.add('wo-liegt-was');
+
+    const allGames = registry.list();
+    const visible = allGames.filter((game) => allowedGameIds.has(game.id));
+    return visible.length ? visible : allGames;
+  }
+
   io.on('connection', (socket) => {
     let clientId = null;
 
@@ -71,7 +84,7 @@ function attachSockets(io, gameState, registry) {
       emitState(socket);
       socket.emit('hello', {
         clientId: cid,
-        games: registry.list(),
+        games: visibleAdminGames(),
         featuredGames: gameState.featuredGames(),
       });
     });
