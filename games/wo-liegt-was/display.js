@@ -217,13 +217,17 @@
     if (row.distanceKm == null) {
       return row.hasPin && game.targetMissing ? 'Keine Auswertung' : 'Keine Eingabe';
     }
+
+    const testQuestion = isTestQuestion(game.currentQuestion);
+    const value = testQuestion ? formatMeters(row.distanceMeters) : `${formatDistance(row.distanceKm)} km`;
+
     if (row.noInput) {
-      return `Keine Eingabe · ${formatDistance(row.distanceKm)} km`;
+      return `Keine Eingabe · ${value}`;
     }
     if (row.invalidInput) {
-      return `Ungültig · ${formatDistance(row.distanceKm)} km`;
+      return `Ungültig · ${value}`;
     }
-    return `${formatDistance(row.distanceKm)} km`;
+    return value;
   }
 
   function totalsList(state, game) {
@@ -380,6 +384,10 @@
   function formatDistance(value) {
     // Tausenderpunkt für große Gesamtentfernungen, z. B. "1.234 km".
     return Math.round(Number(value) || 0).toLocaleString('de-DE');
+  }
+
+  function formatMeters(value) {
+    return `${Math.round(Number(value) || 0).toLocaleString('de-DE')} m`;
   }
 
   function hasValidTarget(question) {
