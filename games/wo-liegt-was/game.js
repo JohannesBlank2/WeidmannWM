@@ -7,6 +7,7 @@ const {
   hasValidTarget,
   pinCoordinates,
 } = require('./mapUtils');
+const { isPointInsideRegion } = require('./geoUtils');
 
 module.exports = {
   id: 'wo-liegt-was',
@@ -187,6 +188,7 @@ function setPlayerPin(ctx, state, playerId, action) {
   if (existing && existing.confirmed) return;
 
   const player = ctx.state.players.find((entry) => entry.id === playerId);
+  const regionId = currentMapView(state.currentQuestion);
   const coords = pinCoordinates({
     lat: action.lat,
     lng: action.lng,
@@ -194,8 +196,10 @@ function setPlayerPin(ctx, state, playerId, action) {
     longitude: action.longitude,
     x: action.x,
     y: action.y,
-  }, currentMapView(state.currentQuestion));
+  }, regionId);
   if (!coords) return;
+  // Pins außerhalb des aktiven Regions-Umrisses werden ignoriert.
+  if (!isPointInsideRegion(coords.lat, coords.lng, regionId)) return;
 
   ctx.setGameState({
     ...state,

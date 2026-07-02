@@ -163,8 +163,11 @@
   }
 
   function ensureMap() {
-    if (window.WoLiegtWasMap) return Promise.resolve();
-    return loadScript('/games/wo-liegt-was/whereIsWhatMapViews.js', 'wlw-map-views-script')
+    if (window.WoLiegtWasMap && window.WlwGeoUtils && window.WlwRegionMask) return Promise.resolve();
+    return loadScript('/games/wo-liegt-was/regionConfigs.js', 'wlw-region-configs-script')
+      .then(() => loadScript('/games/wo-liegt-was/whereIsWhatMapViews.js', 'wlw-map-views-script'))
+      .then(() => loadScript('/games/wo-liegt-was/geoUtils.js', 'wlw-geo-utils-script'))
+      .then(() => loadScript('/games/wo-liegt-was/regionMask.js', 'wlw-region-mask-script'))
       .then(() => loadScript('/games/wo-liegt-was/map.js', 'wlw-map-script'));
   }
 

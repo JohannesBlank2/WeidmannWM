@@ -2,11 +2,14 @@
   const mapViewsApi = window.WhereIsWhatMapViews || {
     MAP_VIEWS: {
       germany: {
+        id: 'germany',
         label: 'Ganz Deutschland',
+        geoJsonPath: '/assets/maps/germany.geojson',
         center: { lat: 51.1657, lng: 10.4515 },
         zoom: 6,
         mobileZoom: 6,
-        bounds: { south: 47.2, west: 5.8, north: 55.1, east: 15.1 },
+        bounds: { south: 47.25, west: 5.84, north: 55.12, east: 15.06 },
+        mapTypeId: 'satellite',
       },
     },
     getMapView(mapView) {
@@ -35,6 +38,8 @@
       this.markers = [];
       this.lines = [];
       this.clickListener = null;
+      this.regionId = this.options.mapView || 'germany';
+      this.noticeTimer = null;
     }
 
     async mount() {
@@ -53,11 +58,13 @@
       this.element.appendChild(canvas);
 
       const view = getMapView(this.options.mapView);
+      this.regionId = view.id || this.options.mapView || 'germany';
+      const mapTypeId = this.options.mapTypeId || view.mapTypeId || 'satellite';
       this.map = new google.maps.Map(canvas, {
         center: this.options.initialCenter || view.center,
         zoom: this.options.initialZoom || (this.options.compact ? view.mobileZoom || view.zoom : view.zoom),
-        mapTypeId: this.options.mapTypeId || 'satellite',
-        styles: (this.options.mapTypeId || 'satellite') === 'roadmap' ? silentMapStyle : undefined,
+        mapTypeId,
+        styles: mapTypeId === 'roadmap' ? silentMapStyle : undefined,
         disableDefaultUI: true,
         clickableIcons: false,
         fullscreenControl: false,
@@ -75,7 +82,26 @@
           { lat: view.bounds.north, lng: view.bounds.east },
         );
         this.map.fitBounds(bounds, this.options.compact ? 16 : 28);
+        // Region bleibt beim Pannen im Bild; weiter herauszoomen als die
+        // eingepasste Ansicht ist gesperrt (minZoom nach dem Fit).
+        this.map.setOptions({
+          restriction: {
+            latLngBounds: {
+              south: view.bounds.south,
+              west: view.bounds.west,
+              north: view.bounds.north,
+              east: view.bounds.east,
+            },
+            strictBounds: false,
+          },
+        });
+        google.maps.event.addListenerOnce(this.map, 'idle', () => {
+          if (!this.map) return;
+          this.map.setOptions({ minZoom: this.map.getZoom() });
+        });
       }
+
+      this.applyRegionOverlay();
 
       this.renderPins();
       if (this.options.isInteractive && !this.options.locked) {
@@ -85,6 +111,10 @@
             lat: event.latLng.lat(),
             lng: event.latLng.lng(),
           };
+          if (window.WlwGeoUtils && !window.WlwGeoUtils.isPointInsideRegion(pin.lat, pin.lng, this.regionId)) {
+            this.showNotice('Bitte innerhalb des Umrisses tippen.');
+            return;
+          }
           this.options.ownPin = {
             ...(this.options.ownPin || {}),
             ...pin,
@@ -97,6 +127,36 @@
           }
         });
       }
+    }
+
+    applyRegionOverlay() {
+      if (!window.WlwGeoUtils || !window.WlwRegionMask) {
+        console.error('[wo-liegt-was] Region-Module (geoUtils/regionMask) fehlen — Karte läuft ohne Umriss-Maske.');
+        return;
+      }
+      window.WlwGeoUtils.loadRegionGeoJson(this.regionId)
+        .then((geoJson) => {
+          if (!this.map) return;
+          window.WlwRegionMask.applyRegionMask(this.map, this.regionId, geoJson);
+        })
+        .catch((err) => {
+          console.error(`[wo-liegt-was] Umriss für Region "${this.regionId}" konnte nicht geladen werden:`, err);
+          this.showNotice('Region-Umriss konnte nicht geladen werden – es gilt nur der Kartenausschnitt.');
+        });
+    }
+
+    showNotice(message) {
+      if (!this.element) return;
+      let notice = this.element.querySelector('.wlw-map-notice');
+      if (!notice) {
+        notice = document.createElement('div');
+        notice.className = 'wlw-map-notice';
+        this.element.appendChild(notice);
+      }
+      notice.textContent = message;
+      notice.classList.add('visible');
+      clearTimeout(this.noticeTimer);
+      this.noticeTimer = setTimeout(() => notice.classList.remove('visible'), 2400);
     }
 
     renderPins() {
@@ -310,6 +370,55 @@
     return getMapView(mapView);
   }
 
+  function getRegionConfig(regionId = 'germany') {
+    return getMapView(regionId);
+  }
+
+  function getRegionBounds(regionId = 'germany') {
+    if (window.WlwGeoUtils) return window.WlwGeoUtils.getRegionBounds(regionId);
+    const view = getMapView(regionId);
+    return view ? view.bounds || null : null;
+  }
+
+  function loadRegionGeoJson(regionId = 'germany') {
+    if (!window.WlwGeoUtils) return Promise.reject(new Error('WlwGeoUtils ist nicht geladen.'));
+    return window.WlwGeoUtils.loadRegionGeoJson(regionId);
+  }
+
+  function isPointInsideRegion(lat, lng, regionId = 'germany') {
+    if (!window.WlwGeoUtils) return true;
+    return window.WlwGeoUtils.isPointInsideRegion(lat, lng, regionId);
+  }
+
+  function fitMapToRegion(map, regionId = 'germany') {
+    if (!map || !window.google || !window.google.maps) return;
+    const bounds = getRegionBounds(regionId);
+    if (!bounds) return;
+    map.fitBounds(new window.google.maps.LatLngBounds(
+      { lat: bounds.south, lng: bounds.west },
+      { lat: bounds.north, lng: bounds.east },
+    ));
+    map.setOptions({
+      restriction: {
+        latLngBounds: { south: bounds.south, west: bounds.west, north: bounds.north, east: bounds.east },
+        strictBounds: false,
+      },
+    });
+    window.google.maps.event.addListenerOnce(map, 'idle', () => {
+      map.setOptions({ minZoom: map.getZoom() });
+    });
+  }
+
+  function applyRegionMask(map, regionId, geoJson) {
+    if (!window.WlwRegionMask) return null;
+    return window.WlwRegionMask.applyRegionMask(map, regionId, geoJson);
+  }
+
+  function clearRegionMask(map) {
+    if (!window.WlwRegionMask) return;
+    window.WlwRegionMask.clearRegionMask(map);
+  }
+
   function latLonToMapPosition(latitude, longitude, mapView = 'germany') {
     const bounds = legacyBounds(getMapView(mapView));
     return {
@@ -460,6 +569,16 @@
         color: #fff8df; font-weight: 900; background: linear-gradient(145deg, #10291f, #020604);
       }
       .wlw-map-error { color: #ffd15c; }
+      .wlw-map-notice {
+        position: absolute; left: 50%; bottom: 14px; z-index: 5; max-width: 92%;
+        transform: translateX(-50%) translateY(6px);
+        padding: 8px 16px; border-radius: 999px; text-align: center;
+        border: 1px solid rgba(255,209,92,.55); background: rgba(18,7,10,.92);
+        color: #fff8df; font-weight: 800; font-size: .85rem;
+        opacity: 0; pointer-events: none;
+        transition: opacity .25s ease, transform .25s ease;
+      }
+      .wlw-map-notice.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
       .wlw-play-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; }
       .wlw-play-title { font-size: 1.35rem; font-weight: 900; color: #fff8df; line-height: 1.12; }
       .wlw-play-meta { color: var(--muted); margin-top: 6px; font-weight: 800; }
@@ -511,6 +630,13 @@
     silentMapStyle,
     getMapView,
     getMapConfig,
+    getRegionConfig,
+    getRegionBounds,
+    loadRegionGeoJson,
+    isPointInsideRegion,
+    fitMapToRegion,
+    applyRegionMask,
+    clearRegionMask,
     latLonToMapPosition,
     mapPositionToLatLon,
     calculateDistanceKm,
