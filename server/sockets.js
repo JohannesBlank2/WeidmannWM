@@ -265,7 +265,8 @@ function setBetTarget(gameState, playerId, targetPlayerId) {
   if (state.phase !== 'wetten') return false;
   const player = state.players.find((entry) => entry.id === playerId);
   const target = state.players.find((entry) => entry.id === targetPlayerId);
-  if (!player || !target || player.id === target.id) return false;
+  // Selbstwetten sind erlaubt: Wer von sich überzeugt ist, darf auf den eigenen Sieg setzen.
+  if (!player || !target) return false;
 
   const existing = state.round.bets[player.id] || {};
   const amount = clampInt(existing.amount, 0, betMaxForPlayer(player));
