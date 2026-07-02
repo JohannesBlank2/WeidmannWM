@@ -137,7 +137,7 @@
     const myBet = round.bets && round.bets[myPlayerId] && round.bets[myPlayerId].targetPlayerId
       ? round.bets[myPlayerId]
       : null;
-    const targets = state.players.filter((p) => p.id !== myPlayerId);
+    const targets = state.players;
     const selectedTarget = myBet ? myBet.targetPlayerId : null;
 
     return `
@@ -147,19 +147,20 @@
       </div>
       <div class="card" style="margin-top:12px;">
         <h2>Auf wen setzt du?</h2>
-        <div class="muted">Wähle nur den Spieler auf dem Handy. Deine Chips legst du IRL vor dich; den Betrag trägt der Admin ein.</div>
+        <div class="muted">Du kannst auch auf dich selbst setzen, wenn du von dir überzeugt bist. Deine Chips legst du IRL vor dich; den Betrag trägt der Admin ein.</div>
         <div class="choice-list" style="margin-top:12px;">
           ${targets.map((p) => {
             const selected = selectedTarget === p.id;
+            const self = p.id === myPlayerId;
             return `
-              <button class="choice-pill bet-target-btn ${selected ? 'selected' : ''}" style="--pc:${p.color}" data-bet-target="${p.id}">
-                <b style="color:${p.color}">${selected ? '✓ ' : ''}${escapeHtml(p.name)}</b>
-                <span>${selected ? 'AUSGEWÄHLT' : 'antippen zum Auswählen'}</span>
+              <button class="choice-pill bet-target-btn ${selected ? 'selected' : ''} ${self ? 'self' : ''}" style="--pc:${p.color}" data-bet-target="${p.id}">
+                <b style="color:${p.color}">${selected ? '✓ ' : ''}${escapeHtml(p.name)}${self ? ' (du)' : ''}</b>
+                <span>${selected ? (self ? 'AUSGEWÄHLT · EIGENSIEG' : 'AUSGEWÄHLT') : 'antippen zum Auswählen'}</span>
               </button>`;
           }).join('')}
         </div>
         <div class="waiting" style="padding:12px 0 0;">
-          ${selectedTarget ? `Ausgewählt: ${escapeHtml(playerName(state, selectedTarget))}` : 'Noch kein Spieler ausgewählt.'}
+          ${selectedTarget ? `Ausgewählt: ${escapeHtml(playerName(state, selectedTarget))}${selectedTarget === myPlayerId ? ' (du selbst)' : ''}` : 'Noch kein Spieler ausgewählt.'}
         </div>
       </div>`;
   }
@@ -239,6 +240,9 @@
       .bet-target-btn {
         border: 1px solid var(--line);
         transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+      }
+      .bet-target-btn.self {
+        border-style: dashed;
       }
       .bet-target-btn.selected {
         border-color: var(--pc) !important;
