@@ -12,6 +12,7 @@
   const phaseHint = document.getElementById('phase-hint');
 
   injectBetStyles();
+  injectCrashStyles();
 
   const ctx = {
     socket: App.socket,
@@ -21,6 +22,11 @@
     sendAction: (a) => App.socket.emit('game:action', a),
   };
   const host = window.createGameHost(gameArea, ctx);
+
+  function isCrashActive(state) {
+    const phase = state && state.crashGame && state.crashGame.phase;
+    return phase === 'ready' || phase === 'running' || phase === 'crashed';
+  }
 
   function renderPlayers(state) {
     const me = App.me(state);
@@ -39,6 +45,11 @@
   }
 
   function renderPick(state, myPlayerId) {
+    if (isCrashActive(state)) {
+      renderCrashPlay(state, myPlayerId);
+      return;
+    }
+
     const r = state.round || {};
     const picker = r.pickerPlayerId && state.players.find((p) => p.id === r.pickerPlayerId);
     const pickerName = picker ? picker.name : '-';
@@ -107,6 +118,77 @@
     }
 
     pickArea.innerHTML = '';
+  }
+
+  function renderCrashPlay(state, myPlayerId) {
+    const crash = state.crashGame || { phase: 'idle', multiplier: 1, players: {} };
+    const player = state.players.find((p) => p.id === myPlayerId);
+    if (!player) {
+      pickArea.innerHTML = waiting('Spieler wählen', 'Wähle zuerst deinen Namen aus.');
+      return;
+    }
+
+    const entry = (crash.players && crash.players[myPlayerId]) || {
+      stake: 0,
+      cashedOut: false,
+      cashoutMultiplier: null,
+      payout: 0,
+      lost: false,
+    };
+    const phase = crash.phase || 'idle';
+    const stake = Number(entry.stake) || 0;
+    const isRunning = phase === 'running';
+    const canCashout = isRunning && stake > 0 && !entry.cashedOut;
+    const statusHtml = crashPlayStatus(entry, phase, stake);
+    const buttonHtml = isRunning && stake > 0
+      ? `<button class="crash-cashout-btn" data-crash-cashout ${canCashout ? '' : 'disabled'}>
+          RAUSGEHEN
+        </button>`
+      : '';
+
+    pickArea.innerHTML = `
+      <div class="crash-play-card">
+        <div class="crash-play-kicker">Mini-Casino Crash</div>
+        <div class="crash-play-multiplier">${formatMultiplier(crash.multiplier)}</div>
+        <div class="crash-play-stake">Dein Einsatz: <b>${stake} Chips</b></div>
+        ${statusHtml}
+        ${buttonHtml}
+      </div>`;
+
+    const cashout = pickArea.querySelector('[data-crash-cashout]');
+    if (cashout) {
+      cashout.onclick = () => {
+        cashout.disabled = true;
+        App.socket.emit('crash:cashout');
+        if (navigator.vibrate) navigator.vibrate(45);
+      };
+    }
+  }
+
+  function crashPlayStatus(entry, phase, stake) {
+    if (stake <= 0) {
+      return '<div class="crash-play-status muted">Du bist in dieser Runde nicht aktiv dabei.</div>';
+    }
+    if (phase === 'ready') {
+      return '<div class="crash-play-status">Warte auf Start.</div>';
+    }
+    if (phase === 'running') {
+      if (entry.cashedOut) {
+        return `
+          <div class="crash-play-status goodish">Du bist raus bei ${formatMultiplier(entry.cashoutMultiplier)}.</div>
+          <div class="crash-play-payout">Auszahlung: <b>${entry.payout || 0} Chips</b></div>`;
+      }
+      return '<div class="crash-play-status">Runde läuft.</div>';
+    }
+    if (phase === 'crashed') {
+      if (entry.cashedOut) {
+        return `
+          <div class="crash-play-status goodish">Du bist raus bei ${formatMultiplier(entry.cashoutMultiplier)}.</div>
+          <div class="crash-play-payout">Auszahlung: <b>${entry.payout || 0} Chips</b></div>`;
+      }
+      return '<div class="crash-play-status badish">Gecrasht - Einsatz verloren.</div>';
+    }
+    return '';
   }
 
   function gameButton(game) {
@@ -218,7 +300,8 @@
 
     renderPick(state, myPlayerId);
 
-    const gameRunning = state.phase === 'spiel-aktiv' && state.activeGame;
+    const crashActive = isCrashActive(state);
+    const gameRunning = !crashActive && state.phase === 'spiel-aktiv' && state.activeGame;
     const usesBuzzer =
       gameRunning &&
       (state.activeGame.built === false ||
@@ -229,7 +312,7 @@
     phaseHint.textContent = gameRunning ? `Spiel: ${state.activeGame.title || state.activeGame.name}` : '';
 
     renderBuzzer(state);
-    host.sync(state);
+    host.sync(crashActive ? { ...state, activeGame: null } : state);
   });
 
   function injectBetStyles() {
@@ -258,6 +341,63 @@
       }
     `;
     document.head.appendChild(style);
+  }
+
+  function injectCrashStyles() {
+    if (document.getElementById('play-crash-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'play-crash-styles';
+    style.textContent = `
+      .crash-play-card {
+        display: grid; gap: 14px; text-align: center;
+        border: 1px solid rgba(255,209,92,.32); border-radius: 8px;
+        background:
+          radial-gradient(circle at 50% 0%, rgba(38,183,126,.22), transparent 0 42%),
+          linear-gradient(180deg, #210d12, var(--bg2));
+        padding: 20px 14px;
+      }
+      .crash-play-kicker {
+        color: var(--muted); font-size: .82rem; font-weight: 900;
+        text-transform: uppercase; letter-spacing: .12em;
+      }
+      .crash-play-multiplier {
+        color: #fff8df; font-size: clamp(3.8rem, 19vw, 6.2rem); line-height: .92;
+        font-weight: 900; text-shadow: 0 0 24px rgba(98,217,255,.28);
+      }
+      .crash-play-stake {
+        color: var(--muted); font-size: 1.05rem; font-weight: 800;
+      }
+      .crash-play-stake b { color: var(--accent); }
+      .crash-play-status {
+        color: var(--text); font-size: 1.25rem; font-weight: 900;
+      }
+      .crash-play-status.goodish { color: #38d982; }
+      .crash-play-status.badish { color: #ff6173; }
+      .crash-play-payout {
+        color: var(--muted); font-size: 1.05rem; font-weight: 800;
+      }
+      .crash-play-payout b { color: #fff8df; }
+      .crash-cashout-btn {
+        width: 100%; min-height: 138px; padding: 24px 12px;
+        border: 0; border-radius: 8px;
+        background: linear-gradient(180deg, #25d979, #0a7c45);
+        color: #fff; font-size: clamp(2.1rem, 10vw, 3.4rem); font-weight: 900;
+        box-shadow: 0 10px 0 #064e2c, 0 18px 30px rgba(0,0,0,.34);
+      }
+      .crash-cashout-btn:active {
+        transform: translateY(7px);
+        box-shadow: 0 3px 0 #064e2c, 0 10px 18px rgba(0,0,0,.32);
+      }
+      .crash-cashout-btn:disabled {
+        background: linear-gradient(180deg, #555, #333);
+        box-shadow: none;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function formatMultiplier(value) {
+    return `${(Number(value) || 1).toFixed(2)}x`;
   }
 
   function categoryLabel(category) {

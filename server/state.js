@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const STATE_FILE = path.join(__dirname, '..', 'state.json');
 const STATE_SCHEMA_VERSION = 4;
@@ -46,6 +47,10 @@ const TOTAL_ROUNDS = 5;
 const SPIN_DURATION_MS = 4600;
 const STARTING_COINS = 50;
 const MAX_BET = 50;
+const CRASH_MIN_POINT = 120;
+const CRASH_MAX_POINT = 1000;
+const CRASH_TICK_MS = 75;
+const CRASH_MAX_STAKE = 100;
 const FEATURED_GAMES = [
   { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', animation: 'slot', durationMs: 6200 },
   { slot: 2, gameId: 'fehlersuche', title: '2016?', animation: 'roulette', durationMs: 4600 },
@@ -108,11 +113,24 @@ function defaultRound() {
   };
 }
 
+function defaultCrashGame(players = []) {
+  return {
+    phase: 'idle',
+    multiplier: 1,
+    crashPoint: null,
+    startedAt: null,
+    crashedAt: null,
+    payoutApplied: false,
+    players: buildCrashPlayers(players),
+  };
+}
+
 function defaultState() {
+  const players = defaultPlayers();
   return {
     schemaVersion: STATE_SCHEMA_VERSION,
     phase: 'lobby',
-    players: defaultPlayers(),
+    players,
     // clients: { [clientId]: { playerId, role, connected, lastSeen } }
     clients: {},
     buzzer: {
@@ -124,6 +142,8 @@ function defaultState() {
     consumedGames: [],
     activeGame: null,
     gameState: {},
+    currentMiniGame: null,
+    crashGame: defaultCrashGame(players),
     meta: {
       history: [],
       featuredGameTitles: {},
@@ -137,6 +157,7 @@ class GameState {
     this.registry = null;
     this._saveTimer = null;
     this._spinTimer = null;
+    this._crashTimer = null;
     this._onChange = null;
   }
 
@@ -171,15 +192,19 @@ class GameState {
         return;
       }
 
+      const players = normalizePlayers(saved.players);
+
       this.state = {
         ...base,
         ...saved,
         schemaVersion: STATE_SCHEMA_VERSION,
-        players: normalizePlayers(saved.players),
-        clients: normalizeClients(saved.clients, normalizePlayers(saved.players)),
+        players,
+        clients: normalizeClients(saved.clients, players),
         buzzer: normalizeBuzzer(saved.buzzer),
         round: normalizeRound(saved.round),
         consumedGames: Array.isArray(saved.consumedGames) ? saved.consumedGames : [],
+        currentMiniGame: saved.currentMiniGame === 'crash' ? 'crash' : null,
+        crashGame: normalizeCrashGame(saved.crashGame, players),
         meta: normalizeMeta(saved.meta, base.meta),
       };
 
@@ -191,6 +216,11 @@ class GameState {
         this._restoreSpinAfterLoad();
       } else if (this.state.phase === 'spiel-intro') {
         this._restoreIntroAfterLoad();
+      }
+
+      if (this.state.crashGame.phase === 'running') {
+        this.state.currentMiniGame = 'crash';
+        this._scheduleCrashTick(0);
       }
 
       console.log('[state] state.json geladen.');
@@ -877,6 +907,192 @@ class GameState {
     this.touch();
   }
 
+  // ---- Mini-Casino: Crash --------------------------------------------------
+
+  prepareCrashGame(stakes = {}) {
+    if (this.state.crashGame && this.state.crashGame.phase === 'running') return false;
+    this._clearCrashTimer();
+    this.state.currentMiniGame = 'crash';
+    this.state.crashGame = {
+      ...defaultCrashGame(this.state.players),
+      phase: 'ready',
+      players: buildCrashPlayers(this.state.players, stakes),
+    };
+    this.touch();
+    return true;
+  }
+
+  setCrashStake(playerId, stake) {
+    const player = this._player(playerId);
+    if (!player) return false;
+
+    if (!this.state.crashGame || this.state.crashGame.phase === 'idle') {
+      this.prepareCrashGame();
+    }
+
+    const crash = this.state.crashGame;
+    if (!crash || crash.phase !== 'ready') return false;
+
+    crash.players = crash.players || buildCrashPlayers(this.state.players);
+    const entry = crash.players[player.id] || crashPlayer(player, 0);
+    crash.players[player.id] = {
+      ...entry,
+      playerId: player.id,
+      name: player.name,
+      stake: clampCrashStake(stake),
+      cashedOut: false,
+      cashoutMultiplier: null,
+      payout: 0,
+      netDelta: 0,
+      finalScore: player.score,
+      lost: false,
+    };
+    this.touch();
+    return true;
+  }
+
+  startCrashGame() {
+    const crash = this.state.crashGame;
+    if (!crash || crash.phase !== 'ready') return false;
+
+    crash.players = normalizeCrashPlayers(crash.players, this.state.players);
+    const activePlayers = Object.values(crash.players).filter((entry) => entry.stake > 0);
+    if (!activePlayers.length) return false;
+
+    this._clearCrashTimer();
+    this.state.currentMiniGame = 'crash';
+    this.state.crashGame = {
+      ...crash,
+      phase: 'running',
+      multiplier: 1,
+      crashPoint: randomCrashPoint(),
+      startedAt: Date.now(),
+      crashedAt: null,
+      payoutApplied: false,
+      players: Object.fromEntries(
+        Object.entries(crash.players).map(([playerId, entry]) => [
+          playerId,
+          {
+            ...entry,
+            cashedOut: false,
+            cashoutMultiplier: null,
+            payout: 0,
+            netDelta: 0,
+            finalScore: this._player(playerId)?.score ?? 0,
+            lost: false,
+          },
+        ])
+      ),
+    };
+    this.touch();
+    this._scheduleCrashTick(CRASH_TICK_MS);
+    return true;
+  }
+
+  cashOutCrash(playerId) {
+    const crash = this.state.crashGame;
+    if (!crash || crash.phase !== 'running') return false;
+    const player = this._player(playerId);
+    const entry = player && crash.players && crash.players[player.id];
+    if (!player || !entry || entry.stake <= 0 || entry.cashedOut) return false;
+
+    const liveMultiplier = this._liveCrashMultiplier(crash);
+    if (liveMultiplier >= Number(crash.crashPoint)) {
+      crash.multiplier = round2(Number(crash.crashPoint));
+      this._finishCrashRound();
+      return false;
+    }
+
+    const cashoutMultiplier = round2(liveMultiplier);
+    entry.cashedOut = true;
+    entry.cashoutMultiplier = cashoutMultiplier;
+    entry.payout = roundToNearestFive(entry.stake * cashoutMultiplier);
+    entry.netDelta = 0;
+    entry.finalScore = player.score;
+    entry.lost = false;
+    crash.multiplier = cashoutMultiplier;
+    this.touch();
+    return true;
+  }
+
+  resetCrashGame() {
+    this._clearCrashTimer();
+    this.state.currentMiniGame = null;
+    this.state.crashGame = defaultCrashGame(this.state.players);
+    this.touch();
+    return true;
+  }
+
+  _scheduleCrashTick(delayMs = CRASH_TICK_MS) {
+    this._clearCrashTimer();
+    this._crashTimer = setTimeout(() => {
+      this._crashTimer = null;
+      this._tickCrashGame();
+    }, Math.max(0, delayMs));
+  }
+
+  _tickCrashGame() {
+    const crash = this.state.crashGame;
+    if (!crash || crash.phase !== 'running') return;
+
+    const nextMultiplier = this._liveCrashMultiplier(crash);
+    if (nextMultiplier >= Number(crash.crashPoint)) {
+      crash.multiplier = round2(Number(crash.crashPoint));
+      this._finishCrashRound();
+      return;
+    }
+
+    crash.multiplier = nextMultiplier;
+    this.touch();
+    this._scheduleCrashTick(CRASH_TICK_MS);
+  }
+
+  _liveCrashMultiplier(crash) {
+    const startedAt = Number(crash && crash.startedAt) || Date.now();
+    const elapsedSeconds = Math.max(0, (Date.now() - startedAt) / 1000);
+    return round2(1 + 0.025 * elapsedSeconds + 0.006 * elapsedSeconds ** 2 + 0.0016 * elapsedSeconds ** 3);
+  }
+
+  _finishCrashRound() {
+    const crash = this.state.crashGame;
+    if (!crash || crash.phase !== 'running') return;
+
+    this._clearCrashTimer();
+    crash.phase = 'crashed';
+    crash.multiplier = round2(Number(crash.crashPoint) || crash.multiplier || 1);
+    crash.crashedAt = Date.now();
+
+    if (!crash.payoutApplied) {
+      for (const entry of Object.values(crash.players || {})) {
+        const player = this._player(entry.playerId);
+        if (!player || entry.stake <= 0) continue;
+
+        if (entry.cashedOut) {
+          entry.payout = roundToNearestFive(entry.stake * Number(entry.cashoutMultiplier || 1));
+          entry.lost = false;
+        } else {
+          entry.payout = 0;
+          entry.lost = true;
+        }
+
+        entry.netDelta = entry.payout - entry.stake;
+        player.score += entry.netDelta;
+        entry.finalScore = player.score;
+      }
+      crash.payoutApplied = true;
+    }
+
+    this.state.currentMiniGame = 'crash';
+    this.touch();
+  }
+
+  _clearCrashTimer() {
+    if (this._crashTimer) {
+      clearTimeout(this._crashTimer);
+      this._crashTimer = null;
+    }
+  }
+
   nextRound() {
     const next = this.state.round.index + 1;
     this.clearActiveGame(false);
@@ -908,6 +1124,7 @@ class GameState {
     const clients = this.state.clients;
     const meta = this.state.meta;
     this._clearSpinTimer();
+    this._clearCrashTimer();
     this.state = defaultState();
     this.state.players = players;
     this.state.clients = clients;
@@ -1025,6 +1242,103 @@ function normalizeRound(round) {
   };
 }
 
+function normalizeCrashGame(crashGame, players) {
+  if (!crashGame || typeof crashGame !== 'object') return defaultCrashGame(players);
+
+  const phases = ['idle', 'ready', 'running', 'crashed', 'finished'];
+  const phase = phases.includes(crashGame.phase) ? crashGame.phase : 'idle';
+  const crashPoint = Number(crashGame.crashPoint);
+  const hasCrashPoint = Number.isFinite(crashPoint) && crashPoint >= 1;
+
+  if ((phase === 'running' || phase === 'crashed' || phase === 'finished') && !hasCrashPoint) {
+    return defaultCrashGame(players);
+  }
+
+  const normalized = {
+    ...defaultCrashGame(players),
+    ...crashGame,
+    phase,
+    multiplier: round2(Math.max(1, Number(crashGame.multiplier) || 1)),
+    crashPoint: hasCrashPoint ? round2(crashPoint) : null,
+    startedAt: Number(crashGame.startedAt) || null,
+    crashedAt: Number(crashGame.crashedAt) || null,
+    payoutApplied: crashGame.payoutApplied === true,
+    players: normalizeCrashPlayers(crashGame.players, players),
+  };
+
+  if (phase === 'idle') {
+    return defaultCrashGame(players);
+  }
+
+  if (phase === 'ready') {
+    normalized.multiplier = 1;
+    normalized.crashPoint = null;
+    normalized.startedAt = null;
+    normalized.crashedAt = null;
+    normalized.payoutApplied = false;
+  }
+
+  if (phase === 'crashed' || phase === 'finished') {
+    for (const entry of Object.values(normalized.players)) {
+      if (entry.stake > 0 && !entry.cashedOut) {
+        entry.lost = true;
+        entry.payout = 0;
+      }
+    }
+  }
+
+  return normalized;
+}
+
+function buildCrashPlayers(players, stakes = {}) {
+  return Object.fromEntries(
+    players.map((player) => [
+      player.id,
+      crashPlayer(player, stakes[player.id]),
+    ])
+  );
+}
+
+function normalizeCrashPlayers(savedPlayers, players) {
+  const saved = savedPlayers && typeof savedPlayers === 'object' ? savedPlayers : {};
+  return Object.fromEntries(
+    players.map((player) => {
+      const entry = saved[player.id] || {};
+      const stake = clampCrashStake(entry.stake);
+      const cashoutMultiplier = Number(entry.cashoutMultiplier);
+      const payout = clampInt(entry.payout, 0, Number.MAX_SAFE_INTEGER);
+      return [
+        player.id,
+        {
+          playerId: player.id,
+          name: entry.name || player.name,
+          stake,
+          cashedOut: entry.cashedOut === true,
+          cashoutMultiplier: Number.isFinite(cashoutMultiplier) ? round2(cashoutMultiplier) : null,
+          payout,
+          netDelta: Number.isFinite(Number(entry.netDelta)) ? Number(entry.netDelta) : 0,
+          finalScore: Number.isFinite(Number(entry.finalScore)) ? Number(entry.finalScore) : player.score,
+          lost: entry.lost === true,
+        },
+      ];
+    })
+  );
+}
+
+function crashPlayer(player, stake = 0) {
+  return {
+    playerId: player.id,
+    name: player.name,
+    stake: clampCrashStake(stake),
+    cashedOut: false,
+    cashoutMultiplier: null,
+    payout: 0,
+    netDelta: 0,
+    finalScore: player.score,
+    lost: false,
+  };
+}
+
 function normalizeBets(bets) {
   if (!bets || typeof bets !== 'object') return {};
   return Object.fromEntries(
@@ -1106,6 +1420,22 @@ function clampInt(value, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function randomCrashPoint() {
+  return round2(crypto.randomInt(CRASH_MIN_POINT, CRASH_MAX_POINT + 1) / 100);
+}
+
+function clampCrashStake(value) {
+  return roundToNearestFive(clampInt(value, 0, CRASH_MAX_STAKE));
+}
+
+function round2(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function roundToNearestFive(value) {
+  return Math.max(0, Math.round((Number(value) || 0) / 5) * 5);
+}
+
 function legacyTeamIdToPlayerId(teamId) {
   const match = /^team([1-5])$/.exec(String(teamId || ''));
   return match ? `player${match[1]}` : null;
@@ -1131,6 +1461,8 @@ module.exports = {
   SPIN_DURATION_MS,
   STARTING_COINS,
   MAX_BET,
+  CRASH_MAX_STAKE,
+  CRASH_TICK_MS,
   FEATURED_GAMES,
   RANK_AWARDS,
 };

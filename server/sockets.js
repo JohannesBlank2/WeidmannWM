@@ -154,6 +154,11 @@ function attachSockets(io, gameState, registry) {
       runActiveGameHook('onAction', { clientId }, action);
     });
 
+    socket.on('crash:cashout', () => {
+      if (!clientId) return;
+      gameState.cashOutCrash(gameState.playerOfClient(clientId));
+    });
+
     // ---- Admin-Steuerung ---------------------------------------------------
     socket.on('admin:set-phase', ({ phase } = {}) => gameState.setPhase(phase));
 
@@ -191,6 +196,26 @@ function attachSockets(io, gameState, registry) {
     socket.on('admin:apply-bet-payouts', () => {
       if (socket.data.role !== 'admin') return;
       applyBetPayouts(gameState);
+    });
+
+    socket.on('admin:crash-prepare', ({ stakes } = {}) => {
+      if (socket.data.role !== 'admin') return;
+      gameState.prepareCrashGame(stakes);
+    });
+
+    socket.on('admin:crash-set-stake', ({ playerId, amount } = {}) => {
+      if (socket.data.role !== 'admin') return;
+      gameState.setCrashStake(playerId, amount);
+    });
+
+    socket.on('admin:crash-start', () => {
+      if (socket.data.role !== 'admin') return;
+      gameState.startCrashGame();
+    });
+
+    socket.on('admin:crash-reset', () => {
+      if (socket.data.role !== 'admin') return;
+      gameState.resetCrashGame();
     });
 
     socket.on('admin:show-lobby', () => {
@@ -412,6 +437,20 @@ function clientState(state, clientId, role) {
   });
   out.round.betCount = out.round.betStatus.filter((entry) => entry.submitted).length;
   out.round.betTotal = state.players.length;
+
+  if (out.crashGame) {
+    const crashPhase = out.crashGame.phase;
+    if (!['crashed', 'finished'].includes(crashPhase)) {
+      out.crashGame.crashPoint = null;
+    }
+
+    if (role === 'play') {
+      out.crashGame.players = playerId && out.crashGame.players && out.crashGame.players[playerId]
+        ? { [playerId]: out.crashGame.players[playerId] }
+        : {};
+    }
+  }
+
   return out;
 }
 

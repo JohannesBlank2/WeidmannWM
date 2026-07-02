@@ -57,6 +57,214 @@
     'Wo liegt was': 'Wo?',
   };
 
+  injectCrashStyles();
+
+  function isCrashActive(state) {
+    const phase = state && state.crashGame && state.crashGame.phase;
+    return phase === 'ready' || phase === 'running' || phase === 'crashed';
+  }
+
+  function renderCrashStage(state) {
+    const crash = state.crashGame || { phase: 'idle', multiplier: 1, players: {} };
+    const phase = crash.phase || 'idle';
+    const crashed = phase === 'crashed';
+    const multiplier = Number(crash.multiplier) || 1;
+    const crashPoint = Number(crash.crashPoint || crash.multiplier) || multiplier;
+    const headline = phase === 'ready'
+      ? 'Warte auf Start'
+      : crashed
+        ? 'CRASHED'
+        : 'RUNNING';
+    const subline = phase === 'ready'
+      ? 'Einsätze sind gesetzt'
+      : crashed
+        ? `Crash bei ${formatMultiplier(crashPoint)}`
+        : 'Jetzt rechtzeitig rausgehen';
+
+    joinQrEl.style.display = 'none';
+    contentEl.innerHTML = `
+      <div class="crash-display ${crashed ? 'crashed' : ''} ${phase === 'ready' ? 'ready' : ''}">
+        <div class="crash-brand">WEIDMANN WM Poker Edition</div>
+        <div class="crash-main">
+          <div class="crash-copy">
+            <div class="crash-kicker">Mini-Casino Crash</div>
+            <div class="crash-multiplier">${formatMultiplier(multiplier)}</div>
+            <div class="crash-status">${escapeHtml(headline)} · ${escapeHtml(subline)}</div>
+          </div>
+          ${crashSvg(multiplier, crashed)}
+        </div>
+        <div class="crash-roster">
+          ${state.players.map((player) => crashPlayerRow(player, crash, phase)).join('')}
+        </div>
+      </div>`;
+  }
+
+  function crashSvg(multiplier, crashed) {
+    const curve = crashCurve(multiplier);
+    return `
+      <svg class="crash-curve" viewBox="0 0 1000 420" aria-hidden="true">
+        <defs>
+          <linearGradient id="crash-curve-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${crashed ? '#7f1d2b' : '#16a86b'}"></stop>
+            <stop offset="100%" stop-color="${crashed ? '#ff5268' : '#62d9ff'}"></stop>
+          </linearGradient>
+          <filter id="crash-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="8" result="blur"></feGaussianBlur>
+            <feMerge>
+              <feMergeNode in="blur"></feMergeNode>
+              <feMergeNode in="SourceGraphic"></feMergeNode>
+            </feMerge>
+          </filter>
+        </defs>
+        <path class="crash-grid-line" d="M70 360 H940"></path>
+        <path class="crash-grid-line" d="M70 280 H940"></path>
+        <path class="crash-grid-line" d="M70 200 H940"></path>
+        <path class="crash-grid-line" d="M70 120 H940"></path>
+        <path class="crash-path-shadow" d="${curve.path}"></path>
+        <path class="crash-path" d="${curve.path}"></path>
+        <circle class="crash-dot-end" cx="${curve.end.x}" cy="${curve.end.y}" r="12"></circle>
+      </svg>`;
+  }
+
+  function crashCurve(multiplier) {
+    const progress = Math.max(0.04, Math.min(1, ((Number(multiplier) || 1) - 1) / 9));
+    const startX = 70;
+    const endX = startX + 860 * progress;
+    const startY = 360;
+    const height = 300 * Math.max(0.16, progress);
+    const points = [];
+    const segments = 24;
+
+    for (let i = 0; i <= segments; i += 1) {
+      const t = i / segments;
+      const curve = (Math.exp(t * 2.2) - 1) / (Math.exp(2.2) - 1);
+      const x = roundCoord(startX + (endX - startX) * t);
+      const y = roundCoord(startY - height * curve);
+      points.push({ x, y });
+    }
+
+    return {
+      path: points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' '),
+      end: points[points.length - 1],
+    };
+  }
+
+  function crashPlayerRow(player, crash, phase) {
+    const entry = crash.players && crash.players[player.id]
+      ? crash.players[player.id]
+      : { stake: 0, cashedOut: false, payout: 0, lost: false };
+    const status = crashStatus(entry, phase);
+    const payout = entry.stake > 0 && phase === 'crashed'
+      ? `${formatCoins(entry.payout || 0)} Chips`
+      : entry.cashedOut
+        ? `${formatCoins(entry.payout || 0)} Chips`
+        : '-';
+
+    return `
+      <div class="crash-player ${entry.cashedOut ? 'out' : ''} ${entry.lost ? 'lost' : ''}" style="--pc:${player.color}">
+        <div class="crash-player-name">${escapeHtml(player.name)}</div>
+        <div class="crash-player-stake">${formatCoins(entry.stake || 0)} Einsatz</div>
+        <div class="crash-player-status">${escapeHtml(status)}</div>
+        <div class="crash-player-payout">${escapeHtml(payout)}</div>
+      </div>`;
+  }
+
+  function crashStatus(entry, phase) {
+    if (!entry || entry.stake <= 0) return 'nicht dabei';
+    if (phase === 'ready') return 'bereit';
+    if (phase === 'running') return entry.cashedOut
+      ? `raus bei ${formatMultiplier(entry.cashoutMultiplier)}`
+      : 'drin';
+    if (phase === 'crashed') return entry.cashedOut ? 'gewonnen' : 'verloren';
+    return '-';
+  }
+
+  function formatMultiplier(value) {
+    return `${(Number(value) || 1).toFixed(2)}x`;
+  }
+
+  function injectCrashStyles() {
+    if (document.getElementById('display-crash-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'display-crash-styles';
+    style.textContent = `
+      body.crash-mode main.stage {
+        min-height: 100vh; padding: 18px;
+        background:
+          radial-gradient(circle at 50% 28%, rgba(41, 191, 132, .18), transparent 0 34%),
+          linear-gradient(180deg, #090406 0%, #15070c 56%, #050203 100%);
+      }
+      body.crash-mode .qr-corner { display: none; }
+      .crash-display {
+        position: relative; width: min(1500px, 96vw); height: min(900px, 94vh);
+        display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px;
+      }
+      .crash-brand {
+        color: var(--accent); text-align: center; font-size: clamp(1.3rem, 2.4vw, 2.5rem);
+        font-weight: 900; letter-spacing: .18em; text-shadow: 0 0 18px rgba(255,209,92,.42);
+      }
+      .crash-main {
+        position: relative; min-height: 0; border: 1px solid rgba(255,209,92,.24);
+        border-radius: 8px; overflow: hidden; background: rgba(9, 4, 6, .68);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.04), 0 26px 58px rgba(0,0,0,.42);
+      }
+      .crash-copy {
+        position: absolute; z-index: 2; inset: 32px 34px auto 34px;
+        display: grid; gap: 4px; justify-items: center; pointer-events: none;
+      }
+      .crash-kicker {
+        color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.35rem);
+        text-transform: uppercase; letter-spacing: .18em; font-weight: 900;
+      }
+      .crash-multiplier {
+        color: #fff8df; font-size: clamp(5.8rem, 15vw, 13rem); line-height: .92;
+        font-weight: 900; text-shadow: 0 0 34px rgba(98,217,255,.28);
+      }
+      .crash-status {
+        color: #d9fdeb; font-size: clamp(1.1rem, 2vw, 2rem); font-weight: 900;
+        text-transform: uppercase; letter-spacing: .08em;
+      }
+      .crash-display.crashed .crash-status,
+      .crash-display.crashed .crash-multiplier { color: #ff6a7d; text-shadow: 0 0 32px rgba(255,82,104,.35); }
+      .crash-curve {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+      }
+      .crash-grid-line {
+        fill: none; stroke: rgba(255,248,223,.09); stroke-width: 2;
+      }
+      .crash-path-shadow {
+        fill: none; stroke: rgba(0,0,0,.62); stroke-width: 22; stroke-linecap: round; stroke-linejoin: round;
+      }
+      .crash-path {
+        fill: none; stroke: url(#crash-curve-gradient); stroke-width: 12;
+        stroke-linecap: round; stroke-linejoin: round; filter: url(#crash-glow);
+      }
+      .crash-dot-end {
+        fill: #fff8df; stroke: var(--accent); stroke-width: 5;
+        filter: drop-shadow(0 0 14px rgba(255,248,223,.75));
+      }
+      .crash-roster {
+        display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;
+      }
+      .crash-player {
+        min-height: 112px; display: grid; gap: 3px; align-content: center; text-align: center;
+        border-radius: 8px; border: 1px solid rgba(255,209,92,.25);
+        background: rgba(18, 7, 10, .74); border-top: 5px solid var(--pc);
+      }
+      .crash-player.out { border-color: rgba(17,140,79,.82); box-shadow: 0 0 20px rgba(17,140,79,.22); }
+      .crash-player.lost { border-color: rgba(196,25,50,.9); opacity: .72; }
+      .crash-player-name { color: var(--pc); font-size: clamp(1rem, 1.4vw, 1.3rem); font-weight: 900; }
+      .crash-player-stake,
+      .crash-player-payout { color: var(--muted); font-weight: 800; }
+      .crash-player-status { color: #fff8df; font-size: clamp(1.1rem, 1.8vw, 1.55rem); font-weight: 900; }
+      @media (max-width: 900px) {
+        .crash-roster { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .crash-copy { inset: 24px 18px auto 18px; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function renderScoreboard(state) {
     const inGame = !!state.activeGame;
 
@@ -1153,16 +1361,25 @@
   }
 
   App.onState((state) => {
-    phaseEl.textContent = state.phase;
+    const crashActive = isCrashActive(state);
+    phaseEl.textContent = crashActive ? `crash-${state.crashGame.phase}` : state.phase;
     document.body.classList.toggle(
       'table-mode',
-      state.phase === 'lobby' ||
+      crashActive ||
+        state.phase === 'lobby' ||
         state.phase === 'runden-uebersicht' ||
         state.phase === 'spiel-intro' ||
         state.phase === 'wetten'
     );
-    renderScoreboard(state);
+    document.body.classList.toggle('crash-mode', crashActive);
 
+    if (crashActive) {
+      host.sync({ ...state, activeGame: null });
+      renderCrashStage(state);
+      return;
+    }
+
+    renderScoreboard(state);
     if (state.activeGame) {
       joinQrEl.style.display = 'none';
       host.sync(state);
