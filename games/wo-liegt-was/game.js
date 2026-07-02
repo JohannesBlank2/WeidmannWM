@@ -406,6 +406,7 @@ function buildResults(players, pins, question) {
       const noInput = !pin;
       const invalidInput = !!pin && !coords;
       let distanceKm = null;
+      let distanceMeters = null;
 
       if (!targetMissing) {
         if (coords) {
@@ -413,12 +414,14 @@ function buildResults(players, pins, question) {
         } else {
           distanceKm = NO_INPUT_PENALTY_KM;
         }
+        distanceMeters = Math.round(distanceKm * 1000);
       }
 
       return {
         playerId: player.id,
         playerName: player.name,
         distanceKm: distanceKm == null ? null : Math.round(distanceKm),
+        distanceMeters,
         hasPin: !!pin,
         noInput,
         invalidInput,
@@ -427,21 +430,21 @@ function buildResults(players, pins, question) {
       };
     })
     .sort((a, b) => {
-      if (a.distanceKm == null && b.distanceKm == null) {
+      if (a.distanceMeters == null && b.distanceMeters == null) {
         if (a.hasPin === b.hasPin) return 0;
         return a.hasPin ? -1 : 1;
       }
-      if (a.distanceKm == null) return 1;
-      if (b.distanceKm == null) return -1;
-      return a.distanceKm - b.distanceKm;
+      if (a.distanceMeters == null) return 1;
+      if (b.distanceMeters == null) return -1;
+      return a.distanceMeters - b.distanceMeters;
     });
 }
 
 function getWinnerFromResults(results) {
-  const valid = results.filter((row) => row.hasPin && row.distanceKm != null && !row.invalidInput);
+  const valid = results.filter((row) => row.hasPin && row.distanceMeters != null && !row.invalidInput);
   if (!valid.length) return { winnerPlayerIds: [], tie: false };
-  const bestDistance = valid[0].distanceKm;
-  const winners = valid.filter((row) => row.distanceKm === bestDistance).map((row) => row.playerId);
+  const bestDistanceMeters = valid[0].distanceMeters;
+  const winners = valid.filter((row) => row.distanceMeters === bestDistanceMeters).map((row) => row.playerId);
   return {
     winnerPlayerIds: winners,
     tie: winners.length > 1,
