@@ -80,6 +80,11 @@
       display: flex; align-items: center; justify-content: center;
     }
     .table-center { text-align: center; padding: 20px; }
+    .table-center.game-bets {
+      align-self: flex-start; width: min(680px, 62vw);
+      margin-top: clamp(74px, 9vh, 112px);
+      display: grid; gap: 18px; justify-items: center;
+    }
     .table-kicker {
       color: var(--accent); text-transform: uppercase; letter-spacing: .32em;
       font-size: 1rem; font-weight: 900; margin-bottom: 10px;
@@ -98,6 +103,39 @@
     .status-dot {
       width: 10px; height: 10px; border-radius: 50%; background: #47d784;
       box-shadow: 0 0 13px rgba(71,215,132,.8);
+    }
+    .table-game-name {
+      color: #fff8df; font-family: Georgia, 'Times New Roman', serif;
+      font-size: clamp(2.2rem, 4.2vw, 4.4rem); font-weight: 900; line-height: 1.02;
+      text-shadow: 0 4px 18px rgba(0,0,0,.5);
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .table-bet-hidden {
+      display: inline-grid; gap: 3px; min-width: min(420px, 100%);
+      padding: 13px 22px; border-radius: 999px;
+      background: rgba(5, 31, 22, .82); border: 1px solid rgba(255,209,92,.32);
+      color: #fff3bf; box-shadow: inset 0 0 0 1px rgba(255,209,92,.1);
+    }
+    .table-bet-hidden b { font-size: 1.1rem; }
+    .table-bet-hidden span { color: rgba(255,248,223,.76); font-weight: 800; }
+    .table-bet-list {
+      width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      gap: 10px;
+    }
+    .table-bet-chip {
+      min-height: 66px; padding: 10px 12px; border-radius: 8px;
+      background: rgba(5, 31, 22, .82); border: 1px solid rgba(255,209,92,.35);
+      box-shadow: inset 0 0 0 1px rgba(255,209,92,.1), 0 8px 18px rgba(0,0,0,.22);
+      display: grid; place-items: center; gap: 2px;
+    }
+    .table-bet-chip span {
+      color: var(--pc); font-weight: 900; font-size: .98rem;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .table-bet-chip b {
+      color: #fff1ae; font-size: 1.28rem; line-height: 1.05;
+      white-space: nowrap;
     }
     .table-seat {
       position: absolute; z-index: 4; min-width: 190px;

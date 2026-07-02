@@ -37,6 +37,11 @@ app.use('/assets', express.static(path.join(ROOT, 'assets')));
 
 // REST: Liste der registrierten Spiele (für Admin, falls ohne Socket gebraucht).
 app.get('/api/games', (req, res) => res.json(registry.list()));
+app.get('/api/config', (req, res) => {
+  res.json({
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '',
+  });
+});
 
 // QR-Code als PNG (data wird per Query übergeben).
 app.get('/qr', async (req, res) => {

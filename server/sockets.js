@@ -31,6 +31,7 @@ function attachSockets(io, gameState, registry) {
       lockBuzzer: () => gameState.lockBuzzer(),
       resetBuzzer: () => gameState.resetBuzzer(),
       addPoints: (playerId, delta) => gameState.addPoints(playerId, delta),
+      addGamePoints: (playerId, delta) => gameState.addGamePoints(playerId, delta),
       emit: (event, payload) => io.emit(event, payload),
     };
   }
@@ -162,6 +163,8 @@ function attachSockets(io, gameState, registry) {
     socket.on('admin:clear-placement', ({ playerId } = {}) =>
       gameState.clearPlacement(playerId));
     socket.on('admin:apply-payouts', () => gameState.applyPayouts());
+    socket.on('admin:set-bets-revealed', ({ revealed } = {}) =>
+      gameState.setBetsRevealed(revealed));
 
     socket.on('admin:show-lobby', () => {
       runActiveGameHook('onStop');
@@ -241,16 +244,21 @@ function clientState(state, clientId, role) {
     ? state.clients[clientId].playerId
     : null;
   const bets = (state.round && state.round.bets) || {};
+  const betsRevealed = state.round && state.round.betsRevealed === true;
   const revealBets =
-    role === 'admin' &&
-    (state.phase === 'auswertung' || state.phase === 'finale' || state.round.payoutApplied);
+    (role === 'display' && betsRevealed) ||
+    (role === 'admin' &&
+      (betsRevealed ||
+        state.phase === 'auswertung' ||
+        state.phase === 'finale' ||
+        state.round.payoutApplied));
 
   out.round.bets = {};
   out.round.betStatus = state.players.map((player) => {
     const bet = bets[player.id] || null;
     const submitted = !!bet;
     if (revealBets) {
-      out.round.bets[player.id] = bet;
+      out.round.bets[player.id] = visibleBetForRole(bet, player.id, role);
     } else if (player.id === playerId && bet) {
       out.round.bets[player.id] = bet;
     } else {
@@ -261,6 +269,25 @@ function clientState(state, clientId, role) {
   out.round.betCount = out.round.betStatus.filter((entry) => entry.submitted).length;
   out.round.betTotal = state.players.length;
   return out;
+}
+
+function visibleBetForRole(bet, playerId, role) {
+  const normalized = bet || {
+    playerId,
+    targetPlayerId: null,
+    amount: 0,
+    submittedAt: 0,
+  };
+
+  if (role === 'display') {
+    return {
+      playerId: normalized.playerId || playerId,
+      amount: Number(normalized.amount) || 0,
+      submitted: !!bet,
+    };
+  }
+
+  return normalized;
 }
 
 module.exports = { attachSockets };

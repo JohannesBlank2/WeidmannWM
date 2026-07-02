@@ -100,6 +100,7 @@ function defaultRound() {
     intro: null,
     // bets: { [playerId]: { playerId, targetPlayerId, amount, submittedAt } }
     bets: {},
+    betsRevealed: false,
     // placements: { [playerId]: 1..5 }
     placements: {},
     payoutApplied: false,
@@ -441,6 +442,13 @@ class GameState {
     return true;
   }
 
+  setBetsRevealed(revealed) {
+    if (!['wetten', 'auswertung', 'finale'].includes(this.state.phase)) return false;
+    this.state.round.betsRevealed = revealed === true;
+    this.touch();
+    return true;
+  }
+
   setPlacement(playerId, place) {
     if (this.state.phase !== 'auswertung') return false;
     const player = this._player(playerId);
@@ -639,6 +647,7 @@ class GameState {
     this.state.round.selectedGame = null;
     this.state.round.spin = defaultSpin();
     this.state.round.bets = {};
+    this.state.round.betsRevealed = false;
     this.state.round.placements = {};
     this.state.round.payoutApplied = false;
     this.state.round.payoutSummary = [];
@@ -669,6 +678,7 @@ class GameState {
     this.state.round.selectedGame = null;
     this.state.round.spin = defaultSpin();
     this.state.round.bets = {};
+    this.state.round.betsRevealed = false;
     this.state.round.placements = {};
     this.state.round.payoutApplied = false;
     this.state.round.payoutSummary = [];
@@ -780,6 +790,7 @@ class GameState {
       status: 'done',
     };
     this.state.round.bets = {};
+    this.state.round.betsRevealed = false;
     this.state.round.placements = {};
     this.state.round.payoutApplied = false;
     this.state.round.payoutSummary = [];
@@ -1007,6 +1018,7 @@ function normalizeRound(round) {
     selectedGame: round.selectedGame || null,
     spin: normalizeSpin(round.spin),
     bets: normalizeBets(round.bets),
+    betsRevealed: round.betsRevealed === true,
     placements: normalizePlacements(round.placements),
     payoutApplied: round.payoutApplied === true,
     payoutSummary: Array.isArray(round.payoutSummary) ? round.payoutSummary : [],

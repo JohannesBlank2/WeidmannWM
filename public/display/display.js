@@ -110,8 +110,6 @@
     if (state.phase === 'lobby') {
       contentEl.innerHTML = tableScene(state, {
         eyebrow: 'WEIDMANN WM Poker Edition',
-        title: 'Lobby',
-        status: 'Spieler treten per Handy bei',
       });
     } else if (state.phase === 'runden-uebersicht') {
       contentEl.innerHTML = tableScene(state, {
@@ -134,7 +132,11 @@
     } else if (state.phase === 'spiel-details') {
       contentEl.innerHTML = gameDetails(r.selectedGame, 'Jackpot. Dieses Spiel wurde ausgelost.', r.choices || []);
     } else if (state.phase === 'wetten') {
-      contentEl.innerHTML = bettingStage(state);
+      contentEl.innerHTML = tableScene(state, {
+        eyebrow: 'WEIDMANN WM Poker Edition',
+        centerClass: 'game-bets',
+        centerHtml: bettingTableCenter(state),
+      });
     } else if (state.phase === 'auswertung') {
       contentEl.innerHTML = payoutStage(state);
     } else if (state.phase === 'finale') {
@@ -142,29 +144,69 @@
     } else {
       contentEl.innerHTML = tableScene(state, {
         eyebrow: 'WEIDMANN WM Poker Edition',
-        title: 'Lobby',
-        status: 'Spieler treten per Handy bei',
       });
     }
   }
 
   function tableScene(state, copy) {
     const connected = connectedPlayerIds(state);
+    const centerHtml = copy.centerHtml || tableCenterCopy(copy);
+    const centerClass = copy.centerClass ? ` ${copy.centerClass}` : '';
     return `
       <div class="table-scene">
         <div class="table-title">
           <div class="table-brand">♠ ${escapeHtml(copy.eyebrow)} ♠</div>
         </div>
         <div class="poker-table">
-          <div class="table-center">
-            <div class="table-kicker">EM Runde</div>
-            <div class="table-main">${escapeHtml(copy.title)}</div>
-            <div class="table-status">
-              <span class="status-dot"></span>${escapeHtml(copy.status)}
-            </div>
-          </div>
+          ${centerHtml ? `<div class="table-center${centerClass}">${centerHtml}</div>` : ''}
         </div>
         ${state.players.map((player, index) => playerSeat(player, index, connected.has(player.id))).join('')}
+      </div>`;
+  }
+
+  function tableCenterCopy(copy) {
+    const kicker = copy.kicker
+      ? `<div class="table-kicker">${escapeHtml(copy.kicker)}</div>`
+      : '';
+    const title = copy.title
+      ? `<div class="table-main">${escapeHtml(copy.title)}</div>`
+      : '';
+    const status = copy.status
+      ? `<div class="table-status"><span class="status-dot"></span>${escapeHtml(copy.status)}</div>`
+      : '';
+    return `${kicker}${title}${status}`;
+  }
+
+  function bettingTableCenter(state) {
+    const r = state.round || {};
+    const game = r.selectedGame;
+    const title = game ? game.title || game.name : 'Spiel';
+    const revealed = r.betsRevealed === true;
+    const count = r.betCount || 0;
+    const total = r.betTotal || state.players.length;
+
+    return `
+      <div class="table-game-name">${escapeHtml(title)}</div>
+      ${revealed ? bettingRevealList(state) : `
+        <div class="table-bet-hidden">
+          <b>Einsätze verdeckt</b>
+          <span>${count}/${total} haben gesetzt</span>
+        </div>`}`;
+  }
+
+  function bettingRevealList(state) {
+    const bets = (state.round && state.round.bets) || {};
+    return `
+      <div class="table-bet-list">
+        ${state.players.map((player) => {
+          const bet = bets[player.id] || {};
+          const amount = bet.submitted ? Number(bet.amount) || 0 : 0;
+          return `
+            <div class="table-bet-chip" style="--pc:${player.color}">
+              <span>${escapeHtml(player.name)}</span>
+              <b>${formatCoins(amount)} Coins</b>
+            </div>`;
+        }).join('')}
       </div>`;
   }
 
@@ -1116,7 +1158,8 @@
       'table-mode',
       state.phase === 'lobby' ||
         state.phase === 'runden-uebersicht' ||
-        state.phase === 'spiel-intro'
+        state.phase === 'spiel-intro' ||
+        state.phase === 'wetten'
     );
     renderScoreboard(state);
 

@@ -51,7 +51,7 @@
     const picker = r.pickerPlayerId && state.players.find((p) => p.id === r.pickerPlayerId);
 
     if (state.phase === 'lobby') {
-      roundBanner.innerHTML = '<span class="muted">Lobby / Tisch wird angezeigt.</span>';
+      roundBanner.innerHTML = '<span class="muted">Tisch wird angezeigt.</span>';
     } else if (r.number < 1) {
       roundBanner.innerHTML = '<span class="muted">Show noch nicht gestartet.</span>';
     } else if (r.selectedGame) {
@@ -111,7 +111,7 @@
         <div class="muted">${introLabel(intro, game)} läuft auf dem TV.</div>
       </div>` +
       '<div class="row" style="margin-top:10px;">' +
-      '<button class="good bigbtn" data-finish-featured-intro>Weiter zur Übersicht</button>' +
+      '<button class="good bigbtn" data-finish-featured-intro>Zurück zum Tisch</button>' +
       '</div>';
     pickerArea.querySelector('[data-finish-featured-intro]').onclick = () =>
       App.socket.emit('admin:finish-featured-intro');
@@ -124,7 +124,7 @@
       categories.map((k) => `<button data-pickkat="${k}">${categoryLabel(k)}</button>`).join('') +
       '</div>' +
       (!categories.length
-        ? '<div class="muted">Keine Kategorie mit offenen Spielen verfuegbar.</div>'
+        ? '<div class="muted">Keine Kategorie mit offenen Spielen verfügbar.</div>'
         : '');
 
     pickerArea.querySelectorAll('[data-pickkat]').forEach((b) => {
@@ -169,20 +169,24 @@
     const round = state.round || {};
     const betCount = round.betCount || 0;
     const betTotal = round.betTotal || state.players.length;
+    const betsRevealed = round.betsRevealed === true;
     pickerArea.innerHTML =
       gameDetails(round.selectedGame) +
       `<div class="game-detail" style="margin-top:10px;">
         <b>Geheime Einsätze</b>
-        <div class="muted">${betCount}/${betTotal} Spielern haben gesetzt. Nicht gesetzte Einsätze zählen als 0.</div>
+        <div class="muted">${betCount}/${betTotal} Spieler haben gesetzt. Nicht gesetzte Einsätze zählen als 0. TV: ${betsRevealed ? 'sichtbar' : 'verdeckt'}.</div>
         <div class="spin-admin-list">${state.players.map((p) => {
           const status = (round.betStatus || []).find((entry) => entry.playerId === p.id);
           return `<div class="game-detail mini"><b style="color:${p.color}">${esc(p.name)}</b> ${status && status.submitted ? 'gesetzt' : 'offen'}</div>`;
         }).join('')}</div>
       </div>` +
       '<div class="row" style="margin-top:10px;">' +
+      `<button class="${betsRevealed ? '' : 'primary'}" data-toggle-bets-revealed>${betsRevealed ? 'Einsätze wieder verdecken' : 'Einsätze auf TV aufdecken'}</button>` +
       '<button class="good" data-start-picked>Spiel starten</button>' +
       '<button data-backcat>Zurück zur Kategorie-Auswahl</button>' +
       '</div>';
+    pickerArea.querySelector('[data-toggle-bets-revealed]').onclick = () =>
+      App.socket.emit('admin:set-bets-revealed', { revealed: !betsRevealed });
     pickerArea.querySelector('[data-start-picked]').onclick = () => App.socket.emit('admin:start-picked-game');
     pickerArea.querySelector('[data-backcat]').onclick = () => App.socket.emit('admin:back-to-categories');
   }
@@ -316,7 +320,7 @@
   function renderGames(state) {
     const activeId = state.activeGame && state.activeGame.id;
     activeGameEl.innerHTML = state.activeGame
-      ? `Aktiv: <b>${esc(state.activeGame.title || state.activeGame.name)}</b>`
+      ? `Aktiv: <b>${esc(state.activeGame.title || state.activeGame.name)}</b>${woLiegtWasAdminControls(state)}`
       : 'Kein Spiel aktiv.';
 
     gamesEl.innerHTML =
@@ -336,6 +340,145 @@
     gamesEl.querySelectorAll('[data-start]').forEach((b) => {
       b.onclick = () => App.socket.emit('admin:start-game', { gameId: b.dataset.start });
     });
+    wireWoLiegtWasAdminControls();
+  }
+
+  function woLiegtWasAdminControls(state) {
+    if (!state.activeGame || state.activeGame.id !== 'wo-liegt-was') return '';
+    const game = state.gameState || {};
+    const questions = Array.isArray(game.questions) ? game.questions : [];
+    const current = game.currentQuestion;
+    const phase = game.phase || 'setup';
+    const pins = game.pins || {};
+    const confirmed = state.players.filter((player) => pins[player.id] && pins[player.id].confirmed).length;
+    const placed = state.players.filter((player) => pins[player.id]).length;
+    const winnerText = woLiegtWasWinnerText(state);
+    const targetMissing = current && !woLiegtWasHasTarget(current);
+
+    return `
+      <div class="game-detail" style="margin-top:10px;">
+        <b>WO LIEGT WAS?</b>
+        <div class="muted">Status: ${phaseLabel(phase)} · ${placed}/${state.players.length} gesetzt · ${confirmed}/${state.players.length} bestätigt</div>
+        ${current ? `
+          <div style="margin-top:8px;"><b>${esc(current.questionText)}</b></div>
+          ${current.subtitle ? `<div class="muted">${esc(current.subtitle)}</div>` : ''}
+          <div class="muted">${esc(current.mapLabel || 'Stumme Karte')} · ${esc(current.category || 'Frage')} · Ziel: ${esc(current.targetName || '-')}</div>
+          ${targetMissing ? '<div style="margin-top:8px; color:#ffd15c; font-weight:900;">Diese Frage hat noch keine Zielkoordinaten.</div>' : ''}
+        ` : '<div class="muted" style="margin-top:8px;">Noch keine Frage ausgewählt.</div>'}
+        <div class="row" style="margin-top:10px;">
+          <button data-wlw-action="random">Zufällige Frage</button>
+          ${phase === 'setup' && current ? '<button class="good" data-wlw-action="start">Eingabe starten</button>' : ''}
+          ${phase === 'placing' ? '<button data-wlw-action="lock">Eingabe schließen</button>' : ''}
+          ${phase === 'locked' || phase === 'placing' ? '<button class="primary" data-wlw-action="reveal">Auflösen</button>' : ''}
+          ${['reveal', 'result'].includes(phase) ? '<button class="good" data-wlw-action="confirm-result" ' + (game.pointsAwarded || game.tie || game.targetMissing ? 'disabled' : '') + '>Punkt vergeben / Ergebnis bestätigen</button>' : ''}
+          ${phase === 'reveal' ? '<button data-wlw-action="result">Ergebnis nur anzeigen</button>' : ''}
+          ${current ? '<button data-wlw-action="reset">Runde zurücksetzen</button>' : ''}
+          <button data-wlw-action="next">Nächste Frage</button>
+          <button data-wlw-action="new-round">Neue Runde</button>
+          <button data-wlw-action="menu">Zurück zum Spielmenü</button>
+        </div>
+        ${game.targetMissing && ['reveal', 'result'].includes(phase) ? '<div class="game-detail mini" style="margin-top:10px;"><b>Zielkoordinaten fehlen – Auswertung nicht möglich.</b></div>' : ''}
+        ${winnerText ? `<div class="game-detail mini" style="margin-top:10px;"><b>${winnerText}</b>${game.pointsAwarded ? '<div class="muted">Punkt wurde bereits vergeben.</div>' : ''}</div>` : ''}
+        ${phase === 'setup' ? questionButtons(questions, current) : ''}
+        ${woLiegtWasResults(state)}
+      </div>`;
+  }
+
+  function questionButtons(questions, current) {
+    if (!questions.length) return '<div class="muted" style="margin-top:8px;">Keine Fragen geladen.</div>';
+    return `
+      <div class="spin-admin-list" style="margin-top:10px;">
+        ${questions.map((question) => `
+          <button class="${current && current.id === question.id ? 'primary' : ''}" data-wlw-question="${esc(question.id)}">
+            ${esc(question.questionText)}
+            <span>${esc(question.mapLabel || 'Stumme Karte')}${woLiegtWasHasTarget(question) ? '' : ' · Zielkoordinaten fehlen'}</span>
+          </button>
+        `).join('')}
+      </div>`;
+  }
+
+  function woLiegtWasResults(state) {
+    const results = state.gameState && Array.isArray(state.gameState.results)
+      ? state.gameState.results
+      : [];
+    if (!results.length) return '';
+    return `
+      <div class="spin-admin-list" style="margin-top:10px;">
+        ${results.map((row, index) => `
+          <div class="game-detail mini">
+            <b>${index + 1}. ${esc(row.playerName)}</b>
+            <div class="muted">${row.distanceKm == null ? (row.hasPin && row.targetMissing ? 'Keine Auswertung' : 'Keine Eingabe') : `${String(Math.round(row.distanceKm)).replace('.', ',')} km entfernt`}</div>
+          </div>
+        `).join('')}
+      </div>`;
+  }
+
+  function woLiegtWasWinnerText(state) {
+    const game = state.gameState || {};
+    if (game.targetMissing && ['reveal', 'result'].includes(game.phase)) return '';
+    const winnerIds = Array.isArray(game.winnerPlayerIds) ? game.winnerPlayerIds : [];
+    if (!winnerIds.length) return '';
+    if (game.tie || winnerIds.length > 1) {
+      return `Unentschieden: ${winnerIds.map((id) => playerName(state, id)).join(' & ')}`;
+    }
+    return `Rundensieger: ${playerName(state, winnerIds[0])}`;
+  }
+
+  function woLiegtWasHasTarget(question) {
+    return Boolean(
+      question &&
+        isFiniteCoordinate(question.targetLatitude) &&
+        isFiniteCoordinate(question.targetLongitude),
+    );
+  }
+
+  function isFiniteCoordinate(value) {
+    return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  }
+
+  function wireWoLiegtWasAdminControls() {
+    activeGameEl.querySelectorAll('[data-wlw-question]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: 'wlw:select-question',
+          questionId: button.dataset.wlwQuestion,
+        });
+    });
+    activeGameEl.querySelectorAll('[data-wlw-action]').forEach((button) => {
+      button.onclick = () => {
+        const type = {
+          random: 'wlw:random-question',
+          start: 'wlw:start-placing',
+          lock: 'wlw:lock',
+          reveal: 'wlw:reveal',
+          result: 'wlw:show-result',
+          'confirm-result': 'wlw:confirm-result',
+          reset: 'wlw:reset-round',
+          next: 'wlw:next-question',
+          'new-round': 'wlw:new-round',
+        }[button.dataset.wlwAction];
+        if (button.dataset.wlwAction === 'menu') {
+          App.socket.emit('admin:stop-game');
+        } else if (type) {
+          App.socket.emit('game:action', { type });
+        }
+      };
+    });
+  }
+
+  function playerName(state, playerId) {
+    const player = state.players.find((entry) => entry.id === playerId);
+    return player ? player.name : playerId;
+  }
+
+  function phaseLabel(phase) {
+    return {
+      setup: 'Frage wählen',
+      placing: 'Pins setzen',
+      locked: 'Eingabe geschlossen',
+      reveal: 'Auflösung',
+      result: 'Ergebnis',
+    }[phase] || phase || '-';
   }
 
   function renderFeaturedGames(state) {
