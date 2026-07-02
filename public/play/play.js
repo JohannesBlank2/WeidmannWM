@@ -38,7 +38,6 @@
 
   function renderPick(state, myPlayerId) {
     const r = state.round || {};
-    const isPicker = myPlayerId && myPlayerId === r.pickerPlayerId;
     const picker = r.pickerPlayerId && state.players.find((p) => p.id === r.pickerPlayerId);
     const pickerName = picker ? picker.name : '-';
 
@@ -73,36 +72,25 @@
     if (state.phase === 'spiel-intro') {
       pickArea.innerHTML = r.intro && r.intro.status === 'ready'
         ? waiting('Gleich geht es los ...', 'Schau auf den TV.')
-        : waiting('Spiel wird vorgestellt ...', 'Schau auf den TV.') + gameDetails(r.selectedGame);
+        : waiting('Spiel wird vorgestellt ...', 'Schau auf den TV.') + gameTitleOnly(r.selectedGame);
       return;
     }
 
     if (state.phase === 'spiel-details') {
       pickArea.innerHTML =
-        gameDetails(r.selectedGame) +
+        gameTitleOnly(r.selectedGame) +
         '<div class="waiting" style="padding-top:12px;">Admin startet das Spiel.</div>';
       return;
     }
 
     if (state.phase === 'wetten') {
       pickArea.innerHTML = bettingHtml(state, myPlayerId);
-      const targetSelect = pickArea.querySelector('[data-bet-target]');
-      const submitBet = (amount) => {
-        const target = targetSelect ? targetSelect.value : null;
-        App.socket.emit('bet:set', { targetPlayerId: target || null, amount });
-      };
-      if (targetSelect) {
-        targetSelect.onchange = () => submitBet(currentBetAmount(state, myPlayerId));
-      }
-      const minus = pickArea.querySelector('[data-bet-minus]');
-      const plus = pickArea.querySelector('[data-bet-plus]');
-      const maxBet = betMaxAmount(state, myPlayerId);
-      if (minus) {
-        minus.onclick = () => submitBet(Math.max(0, currentBetAmount(state, myPlayerId) - 5));
-      }
-      if (plus) {
-        plus.onclick = () => submitBet(Math.min(maxBet, currentBetAmount(state, myPlayerId) + 5));
-      }
+      pickArea.querySelectorAll('[data-bet-target]').forEach((btn) => {
+        btn.onclick = () => {
+          App.socket.emit('bet:set', { targetPlayerId: btn.dataset.betTarget });
+          if (navigator.vibrate) navigator.vibrate(30);
+        };
+      });
       return;
     }
 
@@ -130,15 +118,12 @@
     return `<div class="choice-list">${(round.choices || []).map(gameButton).join('')}</div>`;
   }
 
-  function gameDetails(game) {
+  function gameTitleOnly(game) {
     if (!game) return '<div class="waiting"><div class="big">Kein Spiel ausgelost.</div></div>';
     return `
       <div class="card">
         <h2>${escapeHtml(game.title || game.name)}</h2>
         <div class="muted">${categoryLabel(game.category)}${game.responsiblePerson ? ' - ' + escapeHtml(game.responsiblePerson) : ''}</div>
-        ${detailRow('Kurzbeschreibung', game.description)}
-        ${detailRow('Material', (game.materials || []).join(', '))}
-        ${detailRow('Regeln', game.rules)}
       </div>`;
   }
 
@@ -147,47 +132,31 @@
     const player = state.players.find((p) => p.id === myPlayerId);
     if (!player) return waiting('Spieler wählen', '');
 
-    const myBet = round.bets && round.bets[myPlayerId] && round.bets[myPlayerId].amount != null
+    const myBet = round.bets && round.bets[myPlayerId] && round.bets[myPlayerId].targetPlayerId
       ? round.bets[myPlayerId]
       : null;
     const targets = state.players.filter((p) => p.id !== myPlayerId);
-    const maxBet = betMaxAmount(state, myPlayerId);
-    const selectedTarget = myBet && myBet.targetPlayerId
-      ? myBet.targetPlayerId
-      : targets[0] && targets[0].id;
-    const amount = myBet ? myBet.amount : 0;
+    const selectedTarget = myBet ? myBet.targetPlayerId : null;
 
     return `
-      ${gameDetails(round.selectedGame)}
+      <div class="card">
+        <div class="muted">Ausgewähltes Spiel</div>
+        <h2>${escapeHtml(round.selectedGame ? round.selectedGame.title || round.selectedGame.name : 'Spiel')}</h2>
+      </div>
       <div class="card" style="margin-top:12px;">
-        <h2>Geheimer Einsatz</h2>
-        <div class="muted">Setze 0-${maxBet} Coins (5er-Schritte) auf den Spieler, den du als Sieger tippst. Liegst du richtig, bekommst du den Einsatz als Gewinn dazu. Sonst verlierst du ihn.</div>
-        <label class="bet-label">Mitspieler</label>
-        <select class="bet-input" data-bet-target>
-          ${targets.map((p) => `<option value="${p.id}" ${selectedTarget === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
-        </select>
-        <label class="bet-label">Einsatz</label>
-        <div class="bet-stepper">
-          <button class="bet-step-btn" data-bet-minus ${amount <= 0 ? 'disabled' : ''}>-5</button>
-          <div class="bet-amount">${amount}</div>
-          <button class="bet-step-btn" data-bet-plus ${amount >= maxBet ? 'disabled' : ''}>+5</button>
+        <h2>Auf wen setzt du?</h2>
+        <div class="muted">Wähle nur den Spieler auf dem Handy. Deine Chips legst du IRL vor dich; den Betrag trägt der Admin ein.</div>
+        <div class="choice-list" style="margin-top:12px;">
+          ${targets.map((p) => `
+            <button class="choice-pill ${selectedTarget === p.id ? 'active' : ''}" style="--pc:${p.color}" data-bet-target="${p.id}">
+              <b style="color:${p.color}">${escapeHtml(p.name)}</b>
+              <span>${selectedTarget === p.id ? 'ausgewählt' : 'antippen zum Auswählen'}</span>
+            </button>`).join('')}
         </div>
         <div class="waiting" style="padding:12px 0 0;">
-          ${myBet ? `Gesetzt: ${myBet.amount} Coins${myBet.targetPlayerId ? ' auf ' + escapeHtml(playerName(state, myBet.targetPlayerId)) : ''}` : 'Noch nicht gesetzt.'}
+          ${selectedTarget ? `Ausgewählt: ${escapeHtml(playerName(state, selectedTarget))}` : 'Noch kein Spieler ausgewählt.'}
         </div>
       </div>`;
-  }
-
-  function betMaxAmount(state, myPlayerId) {
-    const player = state.players.find((p) => p.id === myPlayerId);
-    if (!player) return 0;
-    return Math.floor(Math.min(50, Math.max(0, player.score)) / 5) * 5;
-  }
-
-  function currentBetAmount(state, myPlayerId) {
-    const round = state.round || {};
-    const myBet = round.bets && round.bets[myPlayerId];
-    return myBet && myBet.amount != null ? myBet.amount : 0;
   }
 
   function waiting(big, sub) {
@@ -256,10 +225,6 @@
     renderBuzzer(state);
     host.sync(state);
   });
-
-  function detailRow(label, value) {
-    return value ? `<div style="margin-top:8px;"><b>${label}:</b> ${escapeHtml(value)}</div>` : '';
-  }
 
   function categoryLabel(category) {
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
