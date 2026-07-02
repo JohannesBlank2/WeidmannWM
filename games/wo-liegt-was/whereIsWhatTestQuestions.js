@@ -5,26 +5,9 @@
 // TODO: Alle Koordinaten vor dem echten Spiel geokodieren und prüfen.
 const QUESTIONS = [
   {
-    id: 'wo-sind-wir-gerade',
-    questionText: 'Wo sind wir gerade?',
-    subtitle: 'Test-Durchlauf',
-    targetName: 'Aktueller Ort / Weidmannstraße 6',
-    targetAddress: 'Weidmannstraße 6, 80997 München',
-    targetLatitude: 48.184,
-    targetLongitude: 11.507,
-    mapView: 'germany',
-    mapType: 'germany',
-    mapLabel: 'Ganz Deutschland',
-    category: 'Adresse',
-    difficulty: 'mittel',
-    isPrivateQuestion: true,
-    // Testfrage: zählt nicht zur Gesamtwertung.
-    isTestQuestion: true,
-  },
-  {
     id: 'richi-frueher-gewohnt',
     questionText: 'Wo hat Richi früher gewohnt?',
-    subtitle: '',
+    subtitle: 'Test-Durchlauf',
     targetName: 'Richis frühere Adresse',
     targetAddress: 'Winterstraße 12, 85241 Hebertshausen',
     targetLatitude: 48.294,
@@ -34,6 +17,23 @@ const QUESTIONS = [
     mapLabel: 'Ganz Hebertshausen',
     category: 'Adresse',
     difficulty: 'schwer',
+    isPrivateQuestion: true,
+    // Testfrage: zählt nicht zur Gesamtwertung.
+    isTestQuestion: true,
+  },
+  {
+    id: 'wo-sind-wir-gerade',
+    questionText: 'Wo sind wir gerade?',
+    subtitle: '',
+    targetName: 'Aktueller Ort / Weidmannstraße 6',
+    targetAddress: 'Weidmannstraße 6, 80997 München',
+    targetLatitude: 48.184,
+    targetLongitude: 11.507,
+    mapView: 'germany',
+    mapType: 'germany',
+    mapLabel: 'Ganz Deutschland',
+    category: 'Adresse',
+    difficulty: 'mittel',
     isPrivateQuestion: true,
   },
   {
