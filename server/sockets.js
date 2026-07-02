@@ -184,6 +184,14 @@ function attachSockets(io, gameState, registry) {
       if (socket.data.role !== 'admin') return;
       setBetAmount(gameState, playerId, amount);
     });
+    socket.on('admin:set-bet-winner', ({ playerId } = {}) => {
+      if (socket.data.role !== 'admin') return;
+      setBetWinner(gameState, playerId);
+    });
+    socket.on('admin:apply-bet-payouts', () => {
+      if (socket.data.role !== 'admin') return;
+      applyBetPayouts(gameState);
+    });
 
     socket.on('admin:show-lobby', () => {
       runActiveGameHook('onStop');
@@ -297,6 +305,63 @@ function setBetAmount(gameState, playerId, amount) {
     submittedAt: existing.submittedAt || Date.now(),
     amountSetByAdminAt: Date.now(),
   };
+  gameState.touch();
+  return true;
+}
+
+function setBetWinner(gameState, playerId) {
+  const state = gameState.get();
+  if (!['auswertung', 'spiel-aktiv', 'wetten'].includes(state.phase)) return false;
+  if (state.round.payoutApplied) return false;
+  const player = state.players.find((entry) => entry.id === playerId);
+  if (!player) return false;
+
+  state.round.betWinnerPlayerId = player.id;
+  gameState.touch();
+  return true;
+}
+
+function applyBetPayouts(gameState) {
+  const state = gameState.get();
+  if (state.phase !== 'auswertung') return false;
+  if (state.round.payoutApplied) return false;
+
+  const winner = state.players.find((player) => player.id === state.round.betWinnerPlayerId);
+  if (!winner) return false;
+
+  const byId = Object.fromEntries(state.players.map((player) => [player.id, player]));
+  const summary = state.players.map((player) => {
+    const rawBet = state.round.bets[player.id] || {};
+    const amount = clampInt(rawBet.amount, 0, betMaxForPlayer(player));
+    const targetPlayerId = rawBet.targetPlayerId || null;
+    const betWon = amount > 0 && targetPlayerId === winner.id;
+    const payoutReturn = betWon ? amount * 2 : 0;
+    // Der Einsatz liegt IRL bereits im Pot. Für den digitalen Gesamtstand ist
+    // korrekt = Einsatz zurück + Gewinn => netto +Einsatz; falsch = Einsatz weg => netto -Einsatz.
+    const betDelta = amount > 0 ? (betWon ? amount : -amount) : 0;
+
+    player.score += betDelta;
+
+    return {
+      playerId: player.id,
+      playerName: player.name,
+      place: player.id === winner.id ? 1 : null,
+      award: 0,
+      betTargetPlayerId: targetPlayerId,
+      betTargetName: targetPlayerId && byId[targetPlayerId] ? byId[targetPlayerId].name : null,
+      betWinnerPlayerId: winner.id,
+      betWinnerName: winner.name,
+      betAmount: amount,
+      betWon,
+      payoutReturn,
+      betDelta,
+      totalDelta: betDelta,
+      finalScore: player.score,
+    };
+  });
+
+  state.round.payoutApplied = true;
+  state.round.payoutSummary = summary;
   gameState.touch();
   return true;
 }
