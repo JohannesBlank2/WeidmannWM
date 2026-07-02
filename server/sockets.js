@@ -117,9 +117,11 @@ function attachSockets(io, gameState, registry) {
       gameState.backToKategorieAuswahl(gameState.playerOfClient(clientId));
     });
 
-    socket.on('bet:set', ({ targetPlayerId, amount } = {}) => {
+    // Handy setzt nur noch den Tipp-Spieler. Der physische Einsatz wird IRL mit
+    // Chips gelegt und in der Admin-Konsole als Betrag nachgetragen.
+    socket.on('bet:set', ({ targetPlayerId } = {}) => {
       if (!clientId) return;
-      gameState.setBet(gameState.playerOfClient(clientId), targetPlayerId, amount);
+      setBetTarget(gameState, gameState.playerOfClient(clientId), targetPlayerId);
     });
 
     // Start vom Handy bleibt erlaubt, falls man ohne Admin testen will.
@@ -178,6 +180,10 @@ function attachSockets(io, gameState, registry) {
     socket.on('admin:apply-payouts', () => gameState.applyPayouts());
     socket.on('admin:set-bets-revealed', ({ revealed } = {}) =>
       gameState.setBetsRevealed(revealed));
+    socket.on('admin:set-bet-amount', ({ playerId, amount } = {}) => {
+      if (socket.data.role !== 'admin') return;
+      setBetAmount(gameState, playerId, amount);
+    });
 
     socket.on('admin:show-lobby', () => {
       runActiveGameHook('onStop');
@@ -246,6 +252,64 @@ function attachSockets(io, gameState, registry) {
   });
 }
 
+function setBetTarget(gameState, playerId, targetPlayerId) {
+  const state = gameState.get();
+  if (state.phase !== 'wetten') return false;
+  const player = state.players.find((entry) => entry.id === playerId);
+  const target = state.players.find((entry) => entry.id === targetPlayerId);
+  if (!player || !target || player.id === target.id) return false;
+
+  const existing = state.round.bets[player.id] || {};
+  const amount = clampInt(existing.amount, 0, betMaxForPlayer(player));
+  state.round.bets[player.id] = {
+    playerId: player.id,
+    targetPlayerId: target.id,
+    amount,
+    submittedAt: Date.now(),
+    amountSetByAdminAt: existing.amountSetByAdminAt || null,
+  };
+  gameState.touch();
+  return true;
+}
+
+function setBetAmount(gameState, playerId, amount) {
+  const state = gameState.get();
+  if (!['wetten', 'auswertung'].includes(state.phase)) return false;
+  if (state.round.payoutApplied) return false;
+  const player = state.players.find((entry) => entry.id === playerId);
+  if (!player) return false;
+
+  const existing = state.round.bets[player.id] || {
+    playerId: player.id,
+    targetPlayerId: null,
+    submittedAt: 0,
+  };
+  const parsedAmount = clampInt(amount, 0, betMaxForPlayer(player));
+
+  // Ohne Handy-Tipp gibt es keinen Zielspieler. Positive Einsätze ohne Ziel
+  // würden später als verlorene Wette zählen; deshalb ignorieren wir sie.
+  if (parsedAmount > 0 && !existing.targetPlayerId) return false;
+
+  state.round.bets[player.id] = {
+    ...existing,
+    playerId: player.id,
+    amount: parsedAmount,
+    submittedAt: existing.submittedAt || Date.now(),
+    amountSetByAdminAt: Date.now(),
+  };
+  gameState.touch();
+  return true;
+}
+
+function betMaxForPlayer(player) {
+  return Math.min(50, Math.max(0, Number(player.score) || 0));
+}
+
+function clampInt(value, min, max) {
+  const number = Math.round(Number(value) || 0);
+  return Math.max(min, Math.min(max, number));
+}
+
 function legacyTeamIdToPlayerId(teamId) {
   const match = /^team([1-5])$/.exec(String(teamId || ''));
   return match ? `player${match[1]}` : null;
@@ -261,7 +325,8 @@ function clientState(state, clientId, role) {
   const revealBets =
     (role === 'display' && betsRevealed) ||
     (role === 'admin' &&
-      (betsRevealed ||
+      (state.phase === 'wetten' ||
+        betsRevealed ||
         state.phase === 'auswertung' ||
         state.phase === 'finale' ||
         state.round.payoutApplied));
