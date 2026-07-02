@@ -16,6 +16,7 @@
       return this.MAP_VIEWS[mapView] || this.MAP_VIEWS.germany;
     },
   };
+
   const MAP_VIEWS = mapViewsApi.MAP_VIEWS;
   const pendingOptions = new Map();
   let googleMapsPromise = null;
@@ -44,6 +45,7 @@
 
     async mount() {
       this.element.innerHTML = '<div class="wlw-map-loading">Karte wird geladen ...</div>';
+
       let google;
       try {
         google = await loadGoogleMaps();
@@ -60,6 +62,7 @@
       const view = getMapView(this.options.mapView);
       this.regionId = view.id || this.options.mapView || 'germany';
       const mapTypeId = this.options.mapTypeId || view.mapTypeId || 'satellite';
+
       this.map = new google.maps.Map(canvas, {
         center: this.options.initialCenter || view.center,
         zoom: this.options.initialZoom || (this.options.compact ? view.mobileZoom || view.zoom : view.zoom),
@@ -83,8 +86,6 @@
           { lat: view.bounds.north, lng: view.bounds.east },
         );
         this.map.fitBounds(bounds, this.options.compact ? 16 : this.options.fillRegion ? 0 : 28);
-        // Region bleibt beim Pannen im Bild; weiter herauszoomen als die
-        // eingepasste Ansicht ist gesperrt (minZoom nach dem Fit).
         this.map.setOptions({
           restriction: {
             latLngBounds: {
@@ -99,8 +100,6 @@
         google.maps.event.addListenerOnce(this.map, 'idle', () => {
           if (!this.map) return;
           if (this.options.fillRegion) {
-            // fitBounds rastet auf ganze Zoomstufen ein und lässt Ränder frei –
-            // mit fraktionalem Zoom die Region exakt in den Ausschnitt einpassen.
             const zoom = boundsZoom(view.bounds, canvas.clientWidth, canvas.clientHeight);
             if (Number.isFinite(zoom) && zoom > this.map.getZoom()) {
               this.map.setZoom(zoom);
@@ -112,8 +111,8 @@
       }
 
       this.applyRegionOverlay();
-
       this.renderPins();
+
       if (this.options.isInteractive && !this.options.locked) {
         this.clickListener = this.map.addListener('click', (event) => {
           if (!event.latLng) return;
@@ -121,17 +120,19 @@
             lat: event.latLng.lat(),
             lng: event.latLng.lng(),
           };
+
           if (window.WlwGeoUtils && !window.WlwGeoUtils.isPointInsideRegion(pin.lat, pin.lng, this.regionId)) {
             this.showNotice('Bitte innerhalb des Umrisses tippen.');
             return;
           }
+
           this.options.ownPin = {
             ...(this.options.ownPin || {}),
             ...pin,
-            label: this.options.ownPin && this.options.ownPin.label ? this.options.ownPin.label : 'Du',
             color: this.options.ownPin && this.options.ownPin.color ? this.options.ownPin.color : '#ffd15c',
           };
           this.renderPins();
+
           if (typeof this.options.onPinChange === 'function') {
             this.options.onPinChange(pin);
           }
@@ -144,6 +145,7 @@
         console.error('[wo-liegt-was] Region-Module (geoUtils/regionMask) fehlen — Karte läuft ohne Umriss-Maske.');
         return;
       }
+
       window.WlwGeoUtils.loadRegionGeoJson(this.regionId)
         .then((geoJson) => {
           if (!this.map) return;
@@ -172,14 +174,58 @@
     renderPins() {
       if (!this.map || !window.google || !window.google.maps) return;
       this.clearOverlays();
+
       const google = window.google;
       const pins = [];
+      if (this.options.showPlayerPins) pins.push(...this.options.playerPins);
+      if (this.options.ownPin) pins.push(this.options.ownPin);
 
-      if (this.options.showPlayerPins) {
-        pins.push(...this.options.playerPins);
-      }
-      if (this.options.ownPin) {
-        pins.push(this.options.ownPin);
+      const target = this.options.targetPin;
+      const hasTarget = this.options.showTargetPin && target && isFiniteCoordinate(target.lat) && isFiniteCoordinate(target.lng);
+
+      // Reihenfolge im Reveal: Ziel zuerst, dann dicke Linien, dann Spieler-Pins.
+      // Dadurch bleiben die farbigen Spieler-Pins dominant und die Verbindungslinien
+      // sind auf dem TV besser sichtbar.
+      if (hasTarget) {
+        const targetMarker = new google.maps.Marker({
+          position: { lat: Number(target.lat), lng: Number(target.lng) },
+          map: this.map,
+          icon: targetPinIcon(),
+          title: target.label || 'Lösung',
+          optimized: false,
+          zIndex: 2,
+        });
+        this.markers.push(targetMarker);
+
+        if (this.options.showLines) {
+          pins.forEach((pin) => {
+            if (!pin || !isFiniteCoordinate(pin.lat) || !isFiniteCoordinate(pin.lng)) return;
+            const path = [
+              { lat: Number(pin.lat), lng: Number(pin.lng) },
+              { lat: Number(target.lat), lng: Number(target.lng) },
+            ];
+
+            const shadow = new google.maps.Polyline({
+              path,
+              map: this.map,
+              strokeColor: '#050505',
+              strokeOpacity: 0.58,
+              strokeWeight: 9,
+              clickable: false,
+              zIndex: 7,
+            });
+            const line = new google.maps.Polyline({
+              path,
+              map: this.map,
+              strokeColor: pin.color || '#ffd15c',
+              strokeOpacity: 0.96,
+              strokeWeight: 5,
+              clickable: false,
+              zIndex: 8,
+            });
+            this.lines.push(shadow, line);
+          });
+        }
       }
 
       pins.forEach((pin) => {
@@ -188,52 +234,12 @@
           position: { lat: Number(pin.lat), lng: Number(pin.lng) },
           map: this.map,
           icon: playerPinIcon(pin.color || '#ffd15c'),
-          label: pin.label
-            ? {
-                text: String(pin.label).slice(0, 2),
-                color: '#12070a',
-                fontWeight: '900',
-                fontSize: '12px',
-              }
-            : undefined,
-          title: pin.playerName || pin.label || '',
+          title: pin.playerName || '',
           optimized: false,
-          zIndex: 4,
+          zIndex: 10,
         });
         this.markers.push(marker);
       });
-
-      const target = this.options.targetPin;
-      if (this.options.showTargetPin && target && isFiniteCoordinate(target.lat) && isFiniteCoordinate(target.lng)) {
-        const marker = new google.maps.Marker({
-          position: { lat: Number(target.lat), lng: Number(target.lng) },
-          map: this.map,
-          icon: targetPinIcon(),
-          title: target.label || 'Lösung',
-          optimized: false,
-          zIndex: 6,
-        });
-        this.markers.push(marker);
-
-        if (this.options.showLines) {
-          pins.forEach((pin) => {
-            if (!pin || !isFiniteCoordinate(pin.lat) || !isFiniteCoordinate(pin.lng)) return;
-            const line = new google.maps.Polyline({
-              path: [
-                { lat: Number(pin.lat), lng: Number(pin.lng) },
-                { lat: Number(target.lat), lng: Number(target.lng) },
-              ],
-              map: this.map,
-              strokeColor: pin.color || '#ffd15c',
-              strokeOpacity: 0.72,
-              strokeWeight: 2,
-              clickable: false,
-              zIndex: 3,
-            });
-            this.lines.push(line);
-          });
-        }
-      }
     }
 
     clearOverlays() {
@@ -310,26 +316,14 @@
   function normalizePin(pin, mapView = 'germany') {
     if (!pin) return null;
     if (isFiniteCoordinate(pin.lat) && isFiniteCoordinate(pin.lng)) {
-      return {
-        ...pin,
-        lat: Number(pin.lat),
-        lng: Number(pin.lng),
-      };
+      return { ...pin, lat: Number(pin.lat), lng: Number(pin.lng) };
     }
     if (isFiniteCoordinate(pin.latitude) && isFiniteCoordinate(pin.longitude)) {
-      return {
-        ...pin,
-        lat: Number(pin.latitude),
-        lng: Number(pin.longitude),
-      };
+      return { ...pin, lat: Number(pin.latitude), lng: Number(pin.longitude) };
     }
     if (pin.x != null && pin.y != null) {
       const coords = mapPositionToLatLon(pin.x, pin.y, mapView);
-      return {
-        ...pin,
-        lat: coords.lat,
-        lng: coords.lng,
-      };
+      return { ...pin, lat: coords.lat, lng: coords.lng };
     }
     return null;
   }
@@ -447,7 +441,6 @@
     return { lat, lng, latitude: lat, longitude: lng };
   }
 
-  // Zoomstufe (fraktional), bei der die Bounds den Ausschnitt exakt füllen.
   function boundsZoom(bounds, widthPx, heightPx) {
     if (!bounds || !widthPx || !heightPx) return NaN;
     const WORLD = 256;
@@ -526,27 +519,26 @@
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
         <path d="M20 50C14 39 5 30 5 19A15 15 0 0 1 35 19C35 30 26 39 20 50Z" fill="${safeColor}" stroke="#fff8df" stroke-width="3"/>
-        <circle cx="20" cy="19" r="7" fill="#12070a" opacity=".72"/>
+        <circle cx="15" cy="14" r="4" fill="#fff8df" opacity=".35"/>
       </svg>`;
     return {
       url: svgDataUrl(svg),
       scaledSize: new window.google.maps.Size(34, 44),
       anchor: new window.google.maps.Point(17, 43),
-      labelOrigin: new window.google.maps.Point(20, 19),
     };
   }
 
   function targetPinIcon() {
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-        <circle cx="24" cy="24" r="19" fill="#ff3b4f" stroke="#fff8df" stroke-width="4"/>
-        <circle cx="24" cy="24" r="10" fill="#fff8df"/>
-        <circle cx="24" cy="24" r="4" fill="#ff3b4f"/>
+        <circle cx="24" cy="24" r="18" fill="#ff3b4f" stroke="#fff8df" stroke-width="4"/>
+        <circle cx="24" cy="24" r="9" fill="#fff8df"/>
+        <circle cx="24" cy="24" r="3.8" fill="#ff3b4f"/>
       </svg>`;
     return {
       url: svgDataUrl(svg),
-      scaledSize: new window.google.maps.Size(42, 42),
-      anchor: new window.google.maps.Point(21, 21),
+      scaledSize: new window.google.maps.Size(30, 30),
+      anchor: new window.google.maps.Point(15, 15),
     };
   }
 
@@ -578,63 +570,28 @@
       .wlw-test-hint { color: var(--accent); }
       .wlw-totals-title { color: var(--accent); font-weight: 900; letter-spacing: .14em; text-transform: uppercase; font-size: .92rem; margin-top: 12px; }
       .wlw-totals { display: grid; gap: 8px; margin-top: 6px; }
-      .wlw-total-row {
-        display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-        border: 1px solid rgba(255,209,92,.2); border-radius: 8px; background: rgba(5, 31, 22, .7);
-        padding: 10px 12px; font-weight: 900; font-size: 1.08rem;
-      }
+      .wlw-total-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border: 1px solid rgba(255,209,92,.2); border-radius: 8px; background: rgba(5, 31, 22, .7); padding: 10px 12px; font-weight: 900; font-size: 1.08rem; }
       .wlw-total-row .km { color: #fff8df; font-size: 1.16rem; font-weight: 900; white-space: nowrap; }
       .wlw-total-row.leader { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.18) inset; }
-      .wlw-winner-banner {
-        margin-top: 14px; padding: 14px 16px; border-radius: 8px;
-        border: 1px solid rgba(255,209,92,.5); background: linear-gradient(180deg, rgba(255,209,92,.2), rgba(82,41,9,.38));
-        color: #fff8df; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(1.5rem, 2.2vw, 2.3rem);
-        font-weight: 900; text-shadow: 0 3px 14px rgba(0,0,0,.42);
-        box-shadow: 0 0 24px rgba(255,209,92,.14), inset 0 0 0 1px rgba(255,248,223,.08);
-      }
+      .wlw-winner-banner { margin-top: 14px; padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,209,92,.5); background: linear-gradient(180deg, rgba(255,209,92,.2), rgba(82,41,9,.38)); color: #fff8df; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(1.5rem, 2.2vw, 2.3rem); font-weight: 900; text-shadow: 0 3px 14px rgba(0,0,0,.42); box-shadow: 0 0 24px rgba(255,209,92,.14), inset 0 0 0 1px rgba(255,248,223,.08); }
       .wlw-winner-banner.tie { color: #ffd15c; }
       .wlw-map-wrap { display: grid; min-height: 0; place-items: center; }
-      .wlw-map {
-        position: relative; overflow: hidden; width: 100%; aspect-ratio: 1.02 / 1;
-        border: 2px solid rgba(255,209,92,.48); border-radius: 8px;
-        background: linear-gradient(145deg, #10291f, #07130f 66%, #020604);
-        box-shadow: inset 0 0 0 5px rgba(0,0,0,.22), 0 18px 44px rgba(0,0,0,.42);
-      }
+      .wlw-map { position: relative; overflow: hidden; width: 100%; aspect-ratio: 1.02 / 1; border: 2px solid rgba(255,209,92,.48); border-radius: 8px; background: linear-gradient(145deg, #10291f, #07130f 66%, #020604); box-shadow: inset 0 0 0 5px rgba(0,0,0,.22), 0 18px 44px rgba(0,0,0,.42); }
       .wlw-map.compact { aspect-ratio: 1 / .92; max-height: 58vh; min-height: 340px; }
       .wlw-map.interactive { cursor: crosshair; touch-action: none; }
       .wlw-google-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; background: #07130f; }
-      .wlw-map::after {
-        content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
-        box-shadow: inset 0 0 0 5px rgba(0,0,0,.22), inset 0 0 80px rgba(0,0,0,.35);
-      }
-      .wlw-map-loading, .wlw-map-error {
-        position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center;
-        color: #fff8df; font-weight: 900; background: linear-gradient(145deg, #10291f, #020604);
-      }
+      .wlw-map::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; box-shadow: inset 0 0 0 5px rgba(0,0,0,.22), inset 0 0 80px rgba(0,0,0,.35); }
+      .wlw-map-loading, .wlw-map-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #fff8df; font-weight: 900; background: linear-gradient(145deg, #10291f, #020604); }
       .wlw-map-error { color: #ffd15c; }
-      .wlw-map-notice {
-        position: absolute; left: 50%; bottom: 14px; z-index: 5; max-width: 92%;
-        transform: translateX(-50%) translateY(6px);
-        padding: 8px 16px; border-radius: 999px; text-align: center;
-        border: 1px solid rgba(255,209,92,.55); background: rgba(18,7,10,.92);
-        color: #fff8df; font-weight: 800; font-size: .85rem;
-        opacity: 0; pointer-events: none;
-        transition: opacity .25s ease, transform .25s ease;
-      }
+      .wlw-map-notice { position: absolute; left: 50%; bottom: 14px; z-index: 5; max-width: 92%; transform: translateX(-50%) translateY(6px); padding: 8px 16px; border-radius: 999px; text-align: center; border: 1px solid rgba(255,209,92,.55); background: rgba(18,7,10,.92); color: #fff8df; font-weight: 800; font-size: .85rem; opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; }
       .wlw-map-notice.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
       .wlw-play-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; }
       .wlw-play-title { font-size: 1.35rem; font-weight: 900; color: #fff8df; line-height: 1.12; }
       .wlw-play-meta { color: var(--muted); margin-top: 6px; font-weight: 800; }
       .wlw-confirm { width: 100%; margin-top: 12px; padding: 16px; font-weight: 900; }
       .wlw-confirm:disabled { opacity: .45; }
-      @keyframes wlw-winner-pulse {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-2px); }
-      }
-      @media (max-width: 900px) {
-        .wlw-root.display { grid-template-columns: 1fr; height: auto; align-content: start; }
-        .wlw-status-grid { grid-template-columns: 1fr; }
-      }
+      @keyframes wlw-winner-pulse { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+      @media (max-width: 900px) { .wlw-root.display { grid-template-columns: 1fr; height: auto; align-content: start; } .wlw-status-grid { grid-template-columns: 1fr; } }
     `;
   }
 
