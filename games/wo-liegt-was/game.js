@@ -9,6 +9,10 @@ const {
 } = require('./mapUtils');
 const { isPointInsideRegion } = require('./geoUtils');
 
+const INPUT_DURATION_MS = 60 * 1000;
+const NO_INPUT_PENALTY_KM = 1000;
+let inputTimerId = null;
+
 module.exports = {
   id: 'wo-liegt-was',
   mode: 'group',
@@ -16,7 +20,7 @@ module.exports = {
   title: 'WO LIEGT WAS?',
   responsiblePerson: 'Admin',
   description: 'Spieler setzen verdeckt Pins auf eine stumme Karte. Die Entfernungen aller Fragen werden addiert – die kleinste Gesamtentfernung gewinnt.',
-  rules: 'Moderator wählt eine Frage. Jeder Spieler setzt und bestätigt genau einen Pin. Bei der Auflösung werden alle Pins und die echte Lösung angezeigt. Die Entfernung jeder Frage (außer der Testfrage) wird zur Gesamtwertung addiert. Ohne Eingabe zählt die schlechteste Distanz der Runde. Punkte werden am Ende manuell vergeben.',
+  rules: 'Moderator wählt eine Frage. Jeder Spieler setzt und bestätigt genau einen Pin. Bei der Auflösung werden alle Pins und die echte Lösung angezeigt. Die Entfernung jeder Frage (außer der Testfrage) wird zur Gesamtwertung addiert. Ohne Eingabe zählt automatisch 1.000 km. Punkte werden am Ende manuell vergeben.',
   materials: ['TV-Display', 'Spieler-Handys'],
   hasBeenPlayed: false,
   selectable: true,
@@ -28,11 +32,13 @@ module.exports = {
   },
 
   onStart(ctx) {
+    clearInputTimer();
     ctx.lockBuzzer();
     ctx.setGameState(defaultGameState());
   },
 
   onStop(ctx) {
+    clearInputTimer();
     ctx.setGameState({});
   },
 
@@ -56,7 +62,18 @@ module.exports = {
     if (action.type === 'wlw:start-placing') {
       if (!admin) return;
       if (!state.currentQuestionId) return;
-      ctx.setGameState({ ...state, phase: 'placing' });
+      const now = Date.now();
+      const nextState = {
+        ...state,
+        phase: 'placing',
+        placingStartedAt: now,
+        placingEndsAt: now + INPUT_DURATION_MS,
+        inputDurationMs: INPUT_DURATION_MS,
+        timerExpired: false,
+        lockedAt: null,
+      };
+      ctx.setGameState(nextState);
+      scheduleInputTimer(ctx, nextState);
       return;
     }
 
@@ -78,7 +95,7 @@ module.exports = {
 
     if (action.type === 'wlw:lock') {
       if (!admin) return;
-      ctx.setGameState({ ...state, phase: 'locked' });
+      lockRound(ctx, state, false);
       return;
     }
 
@@ -115,6 +132,7 @@ module.exports = {
 
     if (action.type === 'wlw:new-round') {
       if (!admin) return;
+      clearInputTimer();
       ctx.setGameState(defaultGameState());
     }
   },
@@ -135,6 +153,12 @@ function defaultGameState() {
     targetMissing: false,
     resultConfirmed: false,
     revealedAt: null,
+    inputDurationMs: INPUT_DURATION_MS,
+    placingStartedAt: null,
+    placingEndsAt: null,
+    timerExpired: false,
+    lockedAt: null,
+    noInputPenaltyKm: NO_INPUT_PENALTY_KM,
     // Gesamtwertung: Summe der Entfernungen (km) pro Spieler über alle gewerteten Fragen.
     totals: {},
     scoredRounds: 0,
@@ -154,6 +178,7 @@ function ensureGameState(value) {
 }
 
 function selectQuestion(ctx, state, questionId) {
+  clearInputTimer();
   const index = QUESTIONS.findIndex((question) => question.id === questionId);
   const selectedIndex = index >= 0 ? index : 0;
   const selected = QUESTIONS[selectedIndex];
@@ -172,6 +197,12 @@ function selectQuestion(ctx, state, questionId) {
     targetMissing: !hasValidTarget(selected),
     resultConfirmed: false,
     revealedAt: null,
+    placingStartedAt: null,
+    placingEndsAt: null,
+    inputDurationMs: INPUT_DURATION_MS,
+    timerExpired: false,
+    lockedAt: null,
+    noInputPenaltyKm: NO_INPUT_PENALTY_KM,
   });
 }
 
@@ -193,6 +224,10 @@ function selectRandomQuestion(ctx, state) {
 
 function setPlayerPin(ctx, state, playerId, action) {
   if (state.phase !== 'placing') return;
+  if (isInputExpired(state)) {
+    lockRound(ctx, state, true);
+    return;
+  }
   if (!playerId) return;
   const existing = state.pins[playerId];
   if (existing && existing.confirmed) return;
@@ -230,6 +265,10 @@ function setPlayerPin(ctx, state, playerId, action) {
 
 function confirmPlayerPin(ctx, state, playerId) {
   if (state.phase !== 'placing') return;
+  if (isInputExpired(state)) {
+    lockRound(ctx, state, true);
+    return;
+  }
   if (!playerId || !state.pins[playerId]) return;
 
   const nextPins = {
@@ -242,16 +281,55 @@ function confirmPlayerPin(ctx, state, playerId) {
   };
   const allConfirmed = ctx.state.players.every((player) => nextPins[player.id] && nextPins[player.id].confirmed);
 
+  if (allConfirmed) clearInputTimer();
+
   ctx.setGameState({
     ...state,
     phase: allConfirmed ? 'locked' : 'placing',
     pins: nextPins,
+    timerExpired: false,
+    lockedAt: allConfirmed ? Date.now() : state.lockedAt,
   });
+}
+
+function lockRound(ctx, state, timerExpired) {
+  clearInputTimer();
+  ctx.setGameState({
+    ...state,
+    phase: 'locked',
+    timerExpired: timerExpired === true,
+    lockedAt: Date.now(),
+  });
+}
+
+function scheduleInputTimer(ctx, state) {
+  clearInputTimer();
+  const remaining = Math.max(0, Number(state.placingEndsAt || 0) - Date.now());
+  inputTimerId = setTimeout(() => {
+    inputTimerId = null;
+    const live = ensureGameState(ctx.state.gameState);
+    const sameRound = live.currentQuestionId === state.currentQuestionId && Number(live.placingEndsAt) === Number(state.placingEndsAt);
+    if (sameRound && live.phase === 'placing') {
+      lockRound(ctx, live, true);
+    }
+  }, remaining);
+}
+
+function clearInputTimer() {
+  if (inputTimerId) {
+    clearTimeout(inputTimerId);
+    inputTimerId = null;
+  }
+}
+
+function isInputExpired(state) {
+  return state.phase === 'placing' && Number.isFinite(Number(state.placingEndsAt)) && Date.now() >= Number(state.placingEndsAt);
 }
 
 // Stufe 1 der Auflösung: nur die Spieler-Pins zeigen, Ziel bleibt verdeckt.
 function revealPins(ctx, state) {
   if (!state.currentQuestion) return;
+  clearInputTimer();
   ctx.setGameState({
     ...state,
     phase: 'reveal-pins',
@@ -263,6 +341,7 @@ function revealPins(ctx, state) {
 function revealRound(ctx, state) {
   const question = state.currentQuestion;
   if (!question) return;
+  clearInputTimer();
 
   const targetMissing = !hasValidTarget(question);
   const results = buildResults(ctx.state.players, state.pins, question);
@@ -299,12 +378,10 @@ function confirmResult(ctx, state) {
 
   const valid = state.results.filter((row) => row.distanceKm != null);
   if (!valid.length) return;
-  // Ohne gültige Eingabe zählt die schlechteste Distanz der Runde.
-  const worstDistance = Math.max(...valid.map((row) => row.distanceKm));
   const totals = { ...(state.totals || {}) };
   state.results.forEach((row) => {
-    const distance = row.distanceKm != null ? row.distanceKm : worstDistance;
-    totals[row.playerId] = (totals[row.playerId] || 0) + distance;
+    if (row.distanceKm == null) return;
+    totals[row.playerId] = (totals[row.playerId] || 0) + row.distanceKm;
   });
 
   ctx.setGameState({
@@ -326,14 +403,26 @@ function buildResults(players, pins, question) {
     .map((player) => {
       const pin = pins[player.id];
       const coords = pinCoordinates(pin, currentMapView(question));
-      const distanceKm = coords && !targetMissing
-        ? calculateDistanceKm(coords.lat, coords.lng, question.targetLatitude, question.targetLongitude)
-        : null;
+      const noInput = !pin;
+      const invalidInput = !!pin && !coords;
+      let distanceKm = null;
+
+      if (!targetMissing) {
+        if (coords) {
+          distanceKm = calculateDistanceKm(coords.lat, coords.lng, question.targetLatitude, question.targetLongitude);
+        } else {
+          distanceKm = NO_INPUT_PENALTY_KM;
+        }
+      }
+
       return {
         playerId: player.id,
         playerName: player.name,
         distanceKm: distanceKm == null ? null : Math.round(distanceKm),
         hasPin: !!pin,
+        noInput,
+        invalidInput,
+        penaltyKm: noInput || invalidInput ? NO_INPUT_PENALTY_KM : 0,
         targetMissing,
       };
     })
@@ -349,7 +438,7 @@ function buildResults(players, pins, question) {
 }
 
 function getWinnerFromResults(results) {
-  const valid = results.filter((row) => row.hasPin && row.distanceKm != null);
+  const valid = results.filter((row) => row.hasPin && row.distanceKm != null && !row.invalidInput);
   if (!valid.length) return { winnerPlayerIds: [], tie: false };
   const bestDistance = valid[0].distanceKm;
   const winners = valid.filter((row) => row.distanceKm === bestDistance).map((row) => row.playerId);
