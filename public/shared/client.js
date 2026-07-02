@@ -1,22 +1,40 @@
 /* Gemeinsamer Client-Kern für alle drei Ansichten.
  * - Stabile clientId in localStorage (überlebt Reload & Standby -> Reconnect).
+ * - Wichtig: clientId ist rollengetrennt, damit Admin, TV und Handy im selben Browser
+ *   nicht gegenseitig ihre Rolle überschreiben.
  * - Socket.IO-Verbindung mit Auto-Reconnect.
  * - Einheitliches State-Handling: window.App.onState(cb).
  */
 (function () {
-  const STORAGE_KEY = 'weidmann.clientId';
+  const role = window.APP_ROLE || 'play';
+  const LEGACY_STORAGE_KEY = 'weidmann.clientId';
+  const STORAGE_KEY = `weidmann.clientId.${role}`;
+
+  function createClientId() {
+    return `${role}_` + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
 
   function getClientId() {
     let id = localStorage.getItem(STORAGE_KEY);
-    if (!id) {
-      id = 'c_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-      localStorage.setItem(STORAGE_KEY, id);
+    if (id) return id;
+
+    // Nur die Spieler-Ansicht darf den alten Key übernehmen.
+    // Grund: Früher hatten Admin, TV und Spieler denselben localStorage-Key.
+    // Wenn Admin und TV im selben Browser geöffnet waren, hat ein Tab die Rolle des
+    // anderen überschrieben. Dadurch wurden Admin-Aktionen serverseitig ignoriert.
+    if (role === 'play') {
+      const legacyId = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacyId) {
+        localStorage.setItem(STORAGE_KEY, legacyId);
+        return legacyId;
+      }
     }
+
+    id = createClientId();
+    localStorage.setItem(STORAGE_KEY, id);
     return id;
   }
 
-  // role wird vom jeweiligen HTML gesetzt (window.APP_ROLE) bevor dies lädt.
-  const role = window.APP_ROLE || 'play';
   const clientId = getClientId();
 
   // socket.io-Client wird per <script src="/socket.io/socket.io.js"> geladen.
@@ -40,7 +58,11 @@
   socket.on('state', (state) => {
     lastState = state;
     stateListeners.forEach((cb) => {
-      try { cb(state); } catch (e) { console.error(e); }
+      try {
+        cb(state);
+      } catch (e) {
+        console.error(e);
+      }
     });
   });
 
@@ -65,7 +87,9 @@
       stateListeners.push(cb);
       if (lastState) cb(lastState);
     },
-    getState() { return lastState; },
+    getState() {
+      return lastState;
+    },
     me,
   };
 })();
