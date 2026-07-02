@@ -11,6 +11,8 @@
   const buzzStatus = document.getElementById('buzz-status');
   const phaseHint = document.getElementById('phase-hint');
 
+  injectBetStyles();
+
   const ctx = {
     socket: App.socket,
     clientId: App.clientId,
@@ -147,11 +149,14 @@
         <h2>Auf wen setzt du?</h2>
         <div class="muted">Wähle nur den Spieler auf dem Handy. Deine Chips legst du IRL vor dich; den Betrag trägt der Admin ein.</div>
         <div class="choice-list" style="margin-top:12px;">
-          ${targets.map((p) => `
-            <button class="choice-pill ${selectedTarget === p.id ? 'active' : ''}" style="--pc:${p.color}" data-bet-target="${p.id}">
-              <b style="color:${p.color}">${escapeHtml(p.name)}</b>
-              <span>${selectedTarget === p.id ? 'ausgewählt' : 'antippen zum Auswählen'}</span>
-            </button>`).join('')}
+          ${targets.map((p) => {
+            const selected = selectedTarget === p.id;
+            return `
+              <button class="choice-pill bet-target-btn ${selected ? 'selected' : ''}" style="--pc:${p.color}" data-bet-target="${p.id}">
+                <b style="color:${p.color}">${selected ? '✓ ' : ''}${escapeHtml(p.name)}</b>
+                <span>${selected ? 'AUSGEWÄHLT' : 'antippen zum Auswählen'}</span>
+              </button>`;
+          }).join('')}
         </div>
         <div class="waiting" style="padding:12px 0 0;">
           ${selectedTarget ? `Ausgewählt: ${escapeHtml(playerName(state, selectedTarget))}` : 'Noch kein Spieler ausgewählt.'}
@@ -225,6 +230,31 @@
     renderBuzzer(state);
     host.sync(state);
   });
+
+  function injectBetStyles() {
+    if (document.getElementById('play-bet-target-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'play-bet-target-styles';
+    style.textContent = `
+      .bet-target-btn {
+        border: 1px solid var(--line);
+        transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+      }
+      .bet-target-btn.selected {
+        border-color: var(--pc) !important;
+        border-width: 2px;
+        background: linear-gradient(180deg, rgba(255,209,92,.22), rgba(18,7,10,.84));
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc) 62%, transparent), 0 0 26px color-mix(in srgb, var(--pc) 56%, transparent);
+        transform: scale(1.025);
+      }
+      .bet-target-btn.selected span {
+        color: #fff8df;
+        font-weight: 900;
+        letter-spacing: .06em;
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   function categoryLabel(category) {
     return { sport: 'Sport', skill: 'Geschicklichkeit', quiz: 'Quiz' }[category] || category || '-';
