@@ -354,23 +354,32 @@
     const placed = state.players.filter((player) => pins[player.id]).length;
     const winnerText = woLiegtWasWinnerText(state);
     const targetMissing = current && !woLiegtWasHasTarget(current);
+    const isTest = current && current.isTestQuestion === true;
+    const confirmLabel = isTest ? 'Testfrage bestätigen (ohne Wertung)' : 'Runde werten (Entfernungen addieren)';
 
     return `
       <div class="game-detail" style="margin-top:10px;">
         <b>WO LIEGT WAS?</b>
         <div class="muted">Status: ${phaseLabel(phase)} · ${placed}/${state.players.length} gesetzt · ${confirmed}/${state.players.length} bestätigt</div>
+        ${['placing', 'locked'].includes(phase) ? `<div class="muted">${state.players.map((player) => {
+          const pin = pins[player.id];
+          const label = pin && pin.confirmed ? 'bestätigt' : pin ? 'gesetzt' : 'offen';
+          return `${esc(player.name)}: ${label}`;
+        }).join(' · ')}</div>` : ''}
         ${current ? `
           <div style="margin-top:8px;"><b>${esc(current.questionText)}</b></div>
           ${current.subtitle ? `<div class="muted">${esc(current.subtitle)}</div>` : ''}
           <div class="muted">${esc(current.mapLabel || 'Stumme Karte')} · ${esc(current.category || 'Frage')} · Ziel: ${esc(current.targetName || '-')}</div>
+          ${isTest ? '<div style="margin-top:8px; color:#ffd15c; font-weight:900;">Testfrage – zählt nicht zur Gesamtwertung.</div>' : ''}
           ${targetMissing ? '<div style="margin-top:8px; color:#ffd15c; font-weight:900;">Diese Frage hat noch keine Zielkoordinaten.</div>' : ''}
         ` : '<div class="muted" style="margin-top:8px;">Noch keine Frage ausgewählt.</div>'}
         <div class="row" style="margin-top:10px;">
           <button data-wlw-action="random">Zufällige Frage</button>
           ${phase === 'setup' && current ? '<button class="good" data-wlw-action="start">Eingabe starten</button>' : ''}
           ${phase === 'placing' ? '<button data-wlw-action="lock">Eingabe schließen</button>' : ''}
-          ${phase === 'locked' || phase === 'placing' ? '<button class="primary" data-wlw-action="reveal">Auflösen</button>' : ''}
-          ${['reveal', 'result'].includes(phase) ? '<button class="good" data-wlw-action="confirm-result" ' + (game.pointsAwarded || game.tie || game.targetMissing ? 'disabled' : '') + '>Punkt vergeben / Ergebnis bestätigen</button>' : ''}
+          ${phase === 'locked' || phase === 'placing' ? '<button class="primary" data-wlw-action="reveal">Pins aufdecken</button>' : ''}
+          ${phase === 'reveal-pins' ? '<button class="primary" data-wlw-action="reveal-target">Ziel & Ergebnis zeigen</button>' : ''}
+          ${['reveal', 'result'].includes(phase) ? '<button class="good" data-wlw-action="confirm-result" ' + (game.resultConfirmed || game.targetMissing ? 'disabled' : '') + '>' + confirmLabel + '</button>' : ''}
           ${phase === 'reveal' ? '<button data-wlw-action="result">Ergebnis nur anzeigen</button>' : ''}
           ${current ? '<button data-wlw-action="reset">Runde zurücksetzen</button>' : ''}
           <button data-wlw-action="next">Nächste Frage</button>
@@ -378,9 +387,10 @@
           <button data-wlw-action="menu">Zurück zum Spielmenü</button>
         </div>
         ${game.targetMissing && ['reveal', 'result'].includes(phase) ? '<div class="game-detail mini" style="margin-top:10px;"><b>Zielkoordinaten fehlen – Auswertung nicht möglich.</b></div>' : ''}
-        ${winnerText ? `<div class="game-detail mini" style="margin-top:10px;"><b>${winnerText}</b>${game.pointsAwarded ? '<div class="muted">Punkt wurde bereits vergeben.</div>' : ''}</div>` : ''}
+        ${winnerText ? `<div class="game-detail mini" style="margin-top:10px;"><b>${winnerText}</b>${game.resultConfirmed ? '<div class="muted">Runde wurde bereits gewertet.</div>' : ''}</div>` : ''}
         ${phase === 'setup' ? questionButtons(questions, current) : ''}
         ${woLiegtWasResults(state)}
+        ${woLiegtWasTotals(state)}
       </div>`;
   }
 
@@ -410,6 +420,31 @@
             <div class="muted">${row.distanceKm == null ? (row.hasPin && row.targetMissing ? 'Keine Auswertung' : 'Keine Eingabe') : `${String(Math.round(row.distanceKm)).replace('.', ',')} km entfernt`}</div>
           </div>
         `).join('')}
+      </div>`;
+  }
+
+  function woLiegtWasTotals(state) {
+    const game = state.gameState || {};
+    const totals = game.totals && typeof game.totals === 'object' ? game.totals : {};
+    if (!game.scoredRounds || !Object.keys(totals).length) return '';
+    const rows = state.players
+      .map((player) => ({
+        player,
+        totalKm: Number.isFinite(Number(totals[player.id])) ? Number(totals[player.id]) : null,
+      }))
+      .sort((a, b) => {
+        if (a.totalKm == null && b.totalKm == null) return 0;
+        if (a.totalKm == null) return 1;
+        if (b.totalKm == null) return -1;
+        return a.totalKm - b.totalKm;
+      });
+    return `
+      <div class="game-detail mini" style="margin-top:10px;">
+        <b>Gesamtwertung (${game.scoredRounds} ${game.scoredRounds === 1 ? 'Frage' : 'Fragen'} gewertet)</b>
+        ${rows.map((row, index) => `
+          <div class="muted">${index + 1}. ${esc(row.player.name)}: ${row.totalKm == null ? '–' : `${Math.round(row.totalKm).toLocaleString('de-DE')} km`}</div>
+        `).join('')}
+        <div class="muted">Kleinste Gesamtentfernung gewinnt · Punkte werden manuell vergeben.</div>
       </div>`;
   }
 
@@ -451,6 +486,7 @@
           start: 'wlw:start-placing',
           lock: 'wlw:lock',
           reveal: 'wlw:reveal',
+          'reveal-target': 'wlw:reveal-target',
           result: 'wlw:show-result',
           'confirm-result': 'wlw:confirm-result',
           reset: 'wlw:reset-round',
@@ -476,6 +512,7 @@
       setup: 'Frage wählen',
       placing: 'Pins setzen',
       locked: 'Eingabe geschlossen',
+      'reveal-pins': 'Pins aufgedeckt',
       reveal: 'Auflösung',
       result: 'Ergebnis',
     }[phase] || phase || '-';

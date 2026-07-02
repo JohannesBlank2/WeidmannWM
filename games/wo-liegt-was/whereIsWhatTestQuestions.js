@@ -18,6 +18,8 @@ const QUESTIONS = [
     category: 'Adresse',
     difficulty: 'mittel',
     isPrivateQuestion: true,
+    // Testfrage: zählt nicht zur Gesamtwertung.
+    isTestQuestion: true,
   },
   {
     id: 'richi-frueher-gewohnt',

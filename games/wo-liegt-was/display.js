@@ -33,8 +33,9 @@
     const question = game.currentQuestion;
     const phase = game.phase || 'setup';
     const reveal = phase === 'reveal' || phase === 'result';
+    const pinsRevealed = phase === 'reveal-pins' || reveal;
     const targetReady = hasValidTarget(question);
-    const pins = reveal ? displayPins(state, game) : [];
+    const pins = pinsRevealed ? displayPins(state, game) : [];
     const target = reveal && question && targetReady
       ? {
           lat: question.targetLatitude,
@@ -50,22 +51,55 @@
             mapView: question ? currentMapView(question) : 'germany',
             playerPins: pins,
             targetPin: target,
-            showPlayerPins: reveal,
+            showPlayerPins: pinsRevealed,
             showTargetPin: reveal && targetReady,
             showLines: reveal && targetReady,
             isInteractive: false,
             locked: true,
             mapTypeId: 'satellite',
+            fillRegion: true,
           })}
         </div>
         <div class="wlw-panel">
           ${question ? questionCopy(question, phase) : setupCopy(game)}
-          ${statusGrid(state, game)}
           ${reveal ? winnerBanner(state, game) : ''}
-          ${reveal ? resultList(state, game) : ''}
+          ${reveal ? resultList(state, game) : totalsList(state, game)}
         </div>
       </div>`;
+    sizeDisplayMap(container, question ? currentMapView(question) : 'germany');
     window.WoLiegtWasMap.mountRenderedMaps(container);
+  }
+
+  // Passt die Karten-Box an das Seitenverhältnis der Region an, damit die
+  // Region den Kartenausschnitt ohne Letterbox-Ränder füllt.
+  function sizeDisplayMap(container, regionId) {
+    const wrap = container.querySelector('.wlw-map-wrap');
+    const mapEl = container.querySelector('.wlw-map');
+    if (!wrap || !mapEl || !window.WoLiegtWasMap.getRegionBounds) return;
+    const bounds = window.WoLiegtWasMap.getRegionBounds(regionId);
+    if (!bounds) return;
+    const latFraction = mercatorLat(bounds.north) - mercatorLat(bounds.south);
+    const lngFraction = (((bounds.east - bounds.west) % 360) + 360) % 360 / 180 * Math.PI;
+    if (latFraction <= 0 || lngFraction <= 0) return;
+    const aspect = lngFraction / latFraction;
+    const availW = wrap.clientWidth;
+    const availH = wrap.clientHeight;
+    if (!availW || !availH) return;
+    let width = availW;
+    let height = width / aspect;
+    if (height > availH) {
+      height = availH;
+      width = height * aspect;
+    }
+    mapEl.style.aspectRatio = 'auto';
+    mapEl.style.width = `${Math.round(width)}px`;
+    mapEl.style.height = `${Math.round(height)}px`;
+  }
+
+  function mercatorLat(lat) {
+    const clamped = Math.max(-85, Math.min(85, Number(lat)));
+    const rad = (clamped * Math.PI) / 180;
+    return Math.log(Math.tan(Math.PI / 4 + rad / 2));
   }
 
   function setupCopy(game) {
@@ -81,6 +115,7 @@
       setup: 'Bereit',
       placing: 'Pins werden gesetzt',
       locked: 'Eingabe geschlossen',
+      'reveal-pins': 'Die Pins sind aufgedeckt',
       reveal: 'Auflösung',
       result: 'Ergebnis',
     }[phase] || 'Bereit';
@@ -89,28 +124,16 @@
       <div class="wlw-kicker">${escapeHtml(phaseText)}</div>
       <div class="wlw-title">${escapeHtml(question.questionText)}</div>
       ${question.subtitle ? `<div class="wlw-sub">${escapeHtml(question.subtitle)}</div>` : ''}
-      <div class="wlw-sub">${escapeHtml(question.mapLabel || mapLabel(currentMapView(question)))} · ${escapeHtml(question.category || 'Frage')} · ${escapeHtml(question.difficulty || 'offen')}</div>`;
-  }
-
-  function statusGrid(state, game) {
-    const pins = game.pins || {};
-    return `
-      <div class="wlw-status-grid">
-        ${state.players.map((player) => {
-          const pin = pins[player.id];
-          const label = pin && pin.confirmed ? 'bestätigt' : pin ? 'gesetzt' : 'offen';
-          return `
-            <div class="wlw-status" style="color:${player.color}">
-              ${escapeHtml(player.name)}
-              <span>${label}</span>
-            </div>`;
-        }).join('')}
-      </div>`;
+      <div class="wlw-sub">${escapeHtml(question.mapLabel || mapLabel(currentMapView(question)))} · ${escapeHtml(question.category || 'Frage')} · ${escapeHtml(question.difficulty || 'offen')}</div>
+      ${question.isTestQuestion ? '<div class="wlw-sub wlw-test-hint">Testfrage – zählt nicht zur Gesamtwertung</div>' : ''}`;
   }
 
   function resultList(state, game) {
     const results = game.results || [];
     if (!results.length) return '';
+    const totals = game.totals && typeof game.totals === 'object' ? game.totals : {};
+    const hasTotals = game.scoredRounds > 0 && Object.keys(totals).length > 0;
+    const anyMissing = results.some((row) => row.distanceKm == null && !game.targetMissing);
     return `
       <div class="wlw-results" style="margin-top:14px;">
         ${results.map((row, index) => {
@@ -118,13 +141,44 @@
           const distance = row.distanceKm == null
             ? row.hasPin && game.targetMissing ? 'Keine Auswertung' : 'Keine Eingabe'
             : `${formatDistance(row.distanceKm)} km`;
+          const total = hasTotals && Number.isFinite(Number(totals[row.playerId]))
+            ? `<span class="total">Gesamt: ${formatDistance(totals[row.playerId])} km</span>`
+            : '';
           return `
             <div class="wlw-result-row ${index === 0 && row.hasPin && !game.targetMissing ? 'winner' : ''}" style="color:${player ? player.color : '#fff'}">
-              ${index + 1}. ${escapeHtml(row.playerName)}
-              <span>${distance}</span>
+              <b>${index + 1}. ${escapeHtml(row.playerName)}</b>
+              <span class="wlw-result-right"><span class="km">${distance}</span>${total}</span>
             </div>`;
         }).join('')}
+        ${anyMissing && !isTestQuestion(game.currentQuestion) ? '<div class="wlw-sub">Ohne Eingabe zählt die schlechteste Distanz der Runde.</div>' : ''}
       </div>`;
+  }
+
+  function totalsList(state, game) {
+    if (!state.players.length) return '';
+    const totals = game.totals && typeof game.totals === 'object' ? game.totals : {};
+    const scored = Number(game.scoredRounds) || 0;
+    const rows = state.players
+      .map((player) => ({
+        player,
+        totalKm: Number.isFinite(Number(totals[player.id])) ? Number(totals[player.id]) : 0,
+      }))
+      .sort((a, b) => a.totalKm - b.totalKm);
+    const bestTotal = rows[0].totalKm;
+    return `
+      <div class="wlw-totals-title">Gesamtwertung${scored ? ` · ${scored} ${scored === 1 ? 'Frage' : 'Fragen'} gewertet` : ''}</div>
+      <div class="wlw-sub" style="margin-top:2px;">Die kleinste Gesamtentfernung gewinnt.</div>
+      <div class="wlw-totals">
+        ${rows.map((row, index) => `
+          <div class="wlw-total-row ${scored && row.totalKm === bestTotal ? 'leader' : ''}" style="color:${row.player.color}">
+            <b>${index + 1}. ${escapeHtml(row.player.name)}</b>
+            <span class="km">${formatDistance(row.totalKm)} km</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  function isTestQuestion(question) {
+    return Boolean(question && question.isTestQuestion === true);
   }
 
   function winnerBanner(state, game) {
@@ -170,6 +224,8 @@
       pins: {},
       results: [],
       targetMissing: false,
+      totals: {},
+      scoredRounds: 0,
       ...(value && typeof value === 'object' ? value : {}),
     };
   }
@@ -216,7 +272,8 @@
   }
 
   function formatDistance(value) {
-    return String(Math.round(Number(value) || 0)).replace('.', ',');
+    // Tausenderpunkt für große Gesamtentfernungen, z. B. "1.234 km".
+    return Math.round(Number(value) || 0).toLocaleString('de-DE');
   }
 
   function hasValidTarget(question) {

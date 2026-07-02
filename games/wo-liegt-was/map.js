@@ -74,6 +74,7 @@
         gestureHandling: this.options.gestureHandling || (this.options.compact ? 'greedy' : 'none'),
         draggable: this.options.draggable === true || this.options.isInteractive === true,
         keyboardShortcuts: false,
+        isFractionalZoomEnabled: this.options.fillRegion === true ? true : undefined,
       });
 
       if (view.bounds) {
@@ -81,7 +82,7 @@
           { lat: view.bounds.south, lng: view.bounds.west },
           { lat: view.bounds.north, lng: view.bounds.east },
         );
-        this.map.fitBounds(bounds, this.options.compact ? 16 : 28);
+        this.map.fitBounds(bounds, this.options.compact ? 16 : this.options.fillRegion ? 0 : 28);
         // Region bleibt beim Pannen im Bild; weiter herauszoomen als die
         // eingepasste Ansicht ist gesperrt (minZoom nach dem Fit).
         this.map.setOptions({
@@ -97,6 +98,15 @@
         });
         google.maps.event.addListenerOnce(this.map, 'idle', () => {
           if (!this.map) return;
+          if (this.options.fillRegion) {
+            // fitBounds rastet auf ganze Zoomstufen ein und lässt Ränder frei –
+            // mit fraktionalem Zoom die Region exakt in den Ausschnitt einpassen.
+            const zoom = boundsZoom(view.bounds, canvas.clientWidth, canvas.clientHeight);
+            if (Number.isFinite(zoom) && zoom > this.map.getZoom()) {
+              this.map.setZoom(zoom);
+              this.map.setCenter(bounds.getCenter());
+            }
+          }
           this.map.setOptions({ minZoom: this.map.getZoom() });
         });
       }
@@ -293,6 +303,7 @@
       zoomControl: options.zoomControl === true,
       gestureHandling: options.gestureHandling,
       draggable: options.draggable,
+      fillRegion: options.fillRegion === true,
     };
   }
 
@@ -436,6 +447,24 @@
     return { lat, lng, latitude: lat, longitude: lng };
   }
 
+  // Zoomstufe (fraktional), bei der die Bounds den Ausschnitt exakt füllen.
+  function boundsZoom(bounds, widthPx, heightPx) {
+    if (!bounds || !widthPx || !heightPx) return NaN;
+    const WORLD = 256;
+    const latFraction = (mercatorLat(bounds.north) - mercatorLat(bounds.south)) / (2 * Math.PI);
+    const lngFraction = ((((bounds.east - bounds.west) % 360) + 360) % 360) / 360;
+    if (latFraction <= 0 || lngFraction <= 0) return NaN;
+    const latZoom = Math.log2(heightPx / WORLD / latFraction);
+    const lngZoom = Math.log2(widthPx / WORLD / lngFraction);
+    return Math.min(latZoom, lngZoom);
+  }
+
+  function mercatorLat(lat) {
+    const clamped = Math.max(-85, Math.min(85, Number(lat)));
+    const rad = (clamped * Math.PI) / 180;
+    return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+  }
+
   function calculateDistanceKm(lat1, lon1, lat2, lon2) {
     const rawValues = [lat1, lon1, lat2, lon2];
     if (rawValues.some((value) => !isFiniteCoordinate(value))) return null;
@@ -530,7 +559,7 @@
       .wlw-root { width: min(1500px, 96vw); height: min(880px, 92vh); display: grid; gap: 18px; align-content: center; color: var(--text); }
       .wlw-root.display { grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); align-items: stretch; }
       .wlw-root.play { width: 100%; height: auto; min-height: 0; display: grid; gap: 12px; }
-      .wlw-panel { border: 1px solid rgba(255,209,92,.24); border-radius: 8px; background: rgba(18, 7, 10, .72); box-shadow: 0 18px 42px rgba(0,0,0,.34); padding: 18px; }
+      .wlw-panel { border: 1px solid rgba(255,209,92,.24); border-radius: 8px; background: rgba(18, 7, 10, .72); box-shadow: 0 18px 42px rgba(0,0,0,.34); padding: 18px; min-height: 0; overflow-y: auto; }
       .wlw-game-title { color: var(--accent); font-size: clamp(1.1rem, 2vw, 1.8rem); font-weight: 900; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 0 16px rgba(255,209,92,.35); }
       .wlw-kicker { color: var(--accent); font-weight: 900; letter-spacing: .18em; text-transform: uppercase; font-size: .86rem; }
       .wlw-title { font-family: Georgia, 'Times New Roman', serif; color: #fff8df; font-size: clamp(2rem, 4vw, 4.4rem); line-height: 1.02; font-weight: 900; margin-top: 8px; text-shadow: 0 4px 18px rgba(0,0,0,.5); }
@@ -540,8 +569,22 @@
       .wlw-question-btn { width: 100%; text-align: left; }
       .wlw-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
       .wlw-status, .wlw-result-row { border: 1px solid rgba(255,209,92,.2); border-radius: 8px; background: rgba(5, 31, 22, .7); padding: 10px 12px; font-weight: 900; }
-      .wlw-status span, .wlw-result-row span { display: block; color: var(--muted); font-size: .78rem; font-weight: 800; margin-top: 2px; }
+      .wlw-status span { display: block; color: var(--muted); font-size: .78rem; font-weight: 800; margin-top: 2px; }
+      .wlw-result-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 1.08rem; }
+      .wlw-result-right { display: flex; flex-direction: column; align-items: flex-end; }
+      .wlw-result-right .km { color: #fff8df; font-size: 1.08rem; font-weight: 900; white-space: nowrap; }
+      .wlw-result-right .total { color: var(--muted); font-size: .82rem; font-weight: 800; white-space: nowrap; }
       .wlw-result-row.winner { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.18) inset; animation: wlw-winner-pulse 1.8s ease-in-out infinite; }
+      .wlw-test-hint { color: var(--accent); }
+      .wlw-totals-title { color: var(--accent); font-weight: 900; letter-spacing: .14em; text-transform: uppercase; font-size: .92rem; margin-top: 12px; }
+      .wlw-totals { display: grid; gap: 8px; margin-top: 6px; }
+      .wlw-total-row {
+        display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+        border: 1px solid rgba(255,209,92,.2); border-radius: 8px; background: rgba(5, 31, 22, .7);
+        padding: 10px 12px; font-weight: 900; font-size: 1.08rem;
+      }
+      .wlw-total-row .km { color: #fff8df; font-size: 1.16rem; font-weight: 900; white-space: nowrap; }
+      .wlw-total-row.leader { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.18) inset; }
       .wlw-winner-banner {
         margin-top: 14px; padding: 14px 16px; border-radius: 8px;
         border: 1px solid rgba(255,209,92,.5); background: linear-gradient(180deg, rgba(255,209,92,.2), rgba(82,41,9,.38));
@@ -550,7 +593,7 @@
         box-shadow: 0 0 24px rgba(255,209,92,.14), inset 0 0 0 1px rgba(255,248,223,.08);
       }
       .wlw-winner-banner.tie { color: #ffd15c; }
-      .wlw-map-wrap { display: grid; min-height: 0; }
+      .wlw-map-wrap { display: grid; min-height: 0; place-items: center; }
       .wlw-map {
         position: relative; overflow: hidden; width: 100%; aspect-ratio: 1.02 / 1;
         border: 2px solid rgba(255,209,92,.48); border-radius: 8px;

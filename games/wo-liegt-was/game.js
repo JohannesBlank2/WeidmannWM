@@ -15,8 +15,8 @@ module.exports = {
   category: 'quiz',
   title: 'WO LIEGT WAS?',
   responsiblePerson: 'Admin',
-  description: 'Spieler setzen verdeckt Pins auf eine stumme Karte. Der nächste Pin gewinnt.',
-  rules: 'Moderator wählt eine Frage. Jeder Spieler setzt und bestätigt genau einen Pin. Bei der Auflösung werden alle Pins und die echte Lösung angezeigt.',
+  description: 'Spieler setzen verdeckt Pins auf eine stumme Karte. Die Entfernungen aller Fragen werden addiert – die kleinste Gesamtentfernung gewinnt.',
+  rules: 'Moderator wählt eine Frage. Jeder Spieler setzt und bestätigt genau einen Pin. Bei der Auflösung werden alle Pins und die echte Lösung angezeigt. Die Entfernung jeder Frage (außer der Testfrage) wird zur Gesamtwertung addiert. Ohne Eingabe zählt die schlechteste Distanz der Runde. Punkte werden am Ende manuell vergeben.',
   materials: ['TV-Display', 'Spieler-Handys'],
   hasBeenPlayed: false,
   selectable: true,
@@ -84,6 +84,12 @@ module.exports = {
 
     if (action.type === 'wlw:reveal') {
       if (!admin) return;
+      revealPins(ctx, state);
+      return;
+    }
+
+    if (action.type === 'wlw:reveal-target') {
+      if (!admin) return;
       revealRound(ctx, state);
       return;
     }
@@ -103,7 +109,7 @@ module.exports = {
 
     if (action.type === 'wlw:reset-round') {
       if (!admin) return;
-      selectQuestion(ctx, defaultGameState(), action.questionId || state.currentQuestionId);
+      selectQuestion(ctx, state, action.questionId || state.currentQuestionId);
       return;
     }
 
@@ -127,9 +133,11 @@ function defaultGameState() {
     winnerPlayerIds: [],
     tie: false,
     targetMissing: false,
-    pointsAwarded: false,
     resultConfirmed: false,
     revealedAt: null,
+    // Gesamtwertung: Summe der Entfernungen (km) pro Spieler über alle gewerteten Fragen.
+    totals: {},
+    scoredRounds: 0,
   };
 }
 
@@ -140,6 +148,8 @@ function ensureGameState(value) {
     questions: QUESTIONS,
     pins: value && value.pins && typeof value.pins === 'object' ? value.pins : {},
     results: Array.isArray(value && value.results) ? value.results : [],
+    totals: value && value.totals && typeof value.totals === 'object' ? value.totals : {},
+    scoredRounds: value && Number.isInteger(value.scoredRounds) ? value.scoredRounds : 0,
   };
 }
 
@@ -147,6 +157,7 @@ function selectQuestion(ctx, state, questionId) {
   const index = QUESTIONS.findIndex((question) => question.id === questionId);
   const selectedIndex = index >= 0 ? index : 0;
   const selected = QUESTIONS[selectedIndex];
+  // Rundenfelder zurücksetzen, Gesamtwertung (totals/scoredRounds) bleibt erhalten.
   ctx.setGameState({
     ...state,
     phase: 'setup',
@@ -159,7 +170,6 @@ function selectQuestion(ctx, state, questionId) {
     winnerPlayerIds: [],
     tie: false,
     targetMissing: !hasValidTarget(selected),
-    pointsAwarded: false,
     resultConfirmed: false,
     revealedAt: null,
   });
@@ -170,7 +180,7 @@ function selectNextQuestion(ctx, state) {
     ? state.currentQuestionIndex
     : QUESTIONS.findIndex((question) => question.id === state.currentQuestionId);
   const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % QUESTIONS.length : 0;
-  selectQuestion(ctx, defaultGameState(), QUESTIONS[nextIndex].id);
+  selectQuestion(ctx, state, QUESTIONS[nextIndex].id);
 }
 
 function selectRandomQuestion(ctx, state) {
@@ -178,7 +188,7 @@ function selectRandomQuestion(ctx, state) {
   const candidates = QUESTIONS.filter((question) => question.id !== currentId);
   const pool = candidates.length ? candidates : QUESTIONS;
   const selected = pool[Math.floor(Math.random() * pool.length)];
-  selectQuestion(ctx, defaultGameState(), selected.id);
+  selectQuestion(ctx, state, selected.id);
 }
 
 function setPlayerPin(ctx, state, playerId, action) {
@@ -239,6 +249,17 @@ function confirmPlayerPin(ctx, state, playerId) {
   });
 }
 
+// Stufe 1 der Auflösung: nur die Spieler-Pins zeigen, Ziel bleibt verdeckt.
+function revealPins(ctx, state) {
+  if (!state.currentQuestion) return;
+  ctx.setGameState({
+    ...state,
+    phase: 'reveal-pins',
+    revealedAt: Date.now(),
+  });
+}
+
+// Stufe 2 der Auflösung: Ziel und Entfernungen zeigen.
 function revealRound(ctx, state) {
   const question = state.currentQuestion;
   if (!question) return;
@@ -261,20 +282,42 @@ function revealRound(ctx, state) {
 
 function confirmResult(ctx, state) {
   if (!['reveal', 'result'].includes(state.phase)) return;
-  if (state.pointsAwarded) return;
+  if (state.resultConfirmed) return;
   if (state.targetMissing) return;
-  const winnerIds = Array.isArray(state.winnerPlayerIds) ? state.winnerPlayerIds : [];
-  if (winnerIds.length !== 1) return;
+  if (!state.results.length) return;
 
-  if (typeof ctx.addGamePoints === 'function') {
-    ctx.addGamePoints(winnerIds[0], 1);
+  // Testfrage wird bestätigt, aber nicht zur Gesamtwertung addiert.
+  // Punkte werden am Ende manuell vergeben – hier zählen nur Entfernungen.
+  if (isTestQuestion(state.currentQuestion)) {
+    ctx.setGameState({
+      ...state,
+      phase: 'result',
+      resultConfirmed: true,
+    });
+    return;
   }
+
+  const valid = state.results.filter((row) => row.distanceKm != null);
+  if (!valid.length) return;
+  // Ohne gültige Eingabe zählt die schlechteste Distanz der Runde.
+  const worstDistance = Math.max(...valid.map((row) => row.distanceKm));
+  const totals = { ...(state.totals || {}) };
+  state.results.forEach((row) => {
+    const distance = row.distanceKm != null ? row.distanceKm : worstDistance;
+    totals[row.playerId] = (totals[row.playerId] || 0) + distance;
+  });
+
   ctx.setGameState({
     ...state,
     phase: 'result',
-    pointsAwarded: true,
+    totals,
+    scoredRounds: (state.scoredRounds || 0) + 1,
     resultConfirmed: true,
   });
+}
+
+function isTestQuestion(question) {
+  return Boolean(question && question.isTestQuestion === true);
 }
 
 function buildResults(players, pins, question) {

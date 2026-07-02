@@ -112,7 +112,7 @@
         : 'Eingabe geschlossen';
       return `<div class="wlw-play-card"><b>${copy}</b><div class="wlw-play-meta">Schau auf den TV.</div></div>`;
     }
-    if (phase === 'reveal' || phase === 'result') {
+    if (phase === 'reveal-pins' || phase === 'reveal' || phase === 'result') {
       return '<div class="wlw-play-card"><b>Auflösung läuft</b><div class="wlw-play-meta">Schau auf den TV.</div></div>';
     }
     return '<div class="wlw-play-card"><b>Noch nicht gestartet</b><div class="wlw-play-meta">Warte auf den Moderator.</div></div>';
@@ -126,7 +126,7 @@
     if (phase === 'locked') return myPin && myPin.confirmed
       ? 'Pin gesetzt – warte auf Auflösung.'
       : 'Die Eingabe ist geschlossen.';
-    if (phase === 'reveal' || phase === 'result') return 'Die Lösung wird auf dem TV angezeigt.';
+    if (phase === 'reveal-pins' || phase === 'reveal' || phase === 'result') return 'Die Lösung wird auf dem TV angezeigt.';
     return 'Der Moderator startet gleich die Eingabe.';
   }
 
