@@ -71,6 +71,46 @@
     }
     .spin-admin-list { display: grid; gap: 8px; margin-top: 8px; }
     .game-detail.mini { padding: 10px 12px; }
+    .admin-field-label {
+      display: block; margin: 12px 0 6px; color: var(--muted);
+      font-size: .82rem; font-weight: 900; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .admin-text-input {
+      width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 8px; padding: 10px 12px; font: inherit; font-weight: 800;
+    }
+    .musik-admin-current {
+      display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; align-items: center;
+      margin-top: 10px; padding: 10px; border: 1px solid rgba(255,209,92,.24); border-radius: 8px;
+      background: rgba(18, 7, 10, .58);
+    }
+    .musik-admin-current img {
+      width: 58px; height: 58px; border-radius: 6px; object-fit: cover;
+      border: 1px solid rgba(255,209,92,.38);
+    }
+    .musik-admin-song-list {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 6px; margin-top: 10px; max-height: 190px; overflow: auto;
+      padding-right: 3px;
+    }
+    .musik-admin-song-list button {
+      min-height: 40px; text-align: left; padding: 8px 10px; font-size: .86rem; font-weight: 800;
+    }
+    .musik-admin-song-list span { color: var(--muted); }
+    .musik-admin-song-list button.primary span { color: rgba(36,17,4,.72); }
+    .percent-question-list {
+      display: grid; gap: 7px; margin-top: 10px;
+    }
+    .percent-question-list button {
+      display: grid; gap: 4px; text-align: left; padding: 10px 12px;
+    }
+    .percent-question-list span {
+      color: var(--muted); font-size: .82rem; font-weight: 700;
+    }
+    .percent-question-list button.primary span { color: rgba(36,17,4,.72); }
+    .percent-selected-admin {
+      margin-top: 10px; border-color: rgba(255,209,92,.32);
+    }
   </style>
 </head>
 <body>

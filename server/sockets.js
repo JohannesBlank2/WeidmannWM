@@ -60,6 +60,7 @@ function attachSockets(io, gameState, registry) {
     // WO LIEGT WAS? ist ein Test-/Sondermodul und soll in der Admin-Direktstartliste
     // weiterhin erreichbar bleiben, auch wenn es kein fester Animationsslot ist.
     allowedGameIds.add('wo-liegt-was');
+    allowedGameIds.add('das-prozent-quiz');
 
     const allGames = registry.list();
     const visible = allGames.filter((game) => allowedGameIds.has(game.id));

@@ -320,7 +320,7 @@
   function renderGames(state) {
     const activeId = state.activeGame && state.activeGame.id;
     activeGameEl.innerHTML = state.activeGame
-      ? `Aktiv: <b>${esc(state.activeGame.title || state.activeGame.name)}</b>${woLiegtWasAdminControls(state)}`
+      ? `Aktiv: <b>${esc(state.activeGame.title || state.activeGame.name)}</b>${woLiegtWasAdminControls(state)}${musikErratenPlaylistAdminControls(state)}${percentQuizAdminControls(state)}`
       : 'Kein Spiel aktiv.';
 
     gamesEl.innerHTML =
@@ -341,6 +341,329 @@
       b.onclick = () => App.socket.emit('admin:start-game', { gameId: b.dataset.start });
     });
     wireWoLiegtWasAdminControls();
+    wireMusikErratenPlaylistAdminControls();
+    wirePercentQuizAdminControls();
+  }
+
+  function percentQuizAdminControls(state) {
+    if (!state.activeGame || state.activeGame.id !== 'das-prozent-quiz') return '';
+    const game = percentQuizState(state);
+    const selected = game.questions.find((question) => question.id === game.selectedQuestionId) || null;
+    const answers = selected ? percentAnswersFor(game, selected.id) : {};
+
+    return `
+      <div class="game-detail percent-admin" style="margin-top:10px;">
+        <b>Das Prozent-Quiz</b>
+        <div class="muted">Status: ${percentPhaseLabel(game.phase)} · Antworten ${game.answersOpen ? 'offen' : 'geschlossen'}</div>
+        ${game.adminWarning ? `<div style="margin-top:8px;color:#ffd15c;font-weight:900;">${esc(game.adminWarning)}</div>` : ''}
+        ${percentBettingAdmin(game, state.players)}
+        ${selected ? percentSelectedAdmin(selected, game, state.players, answers) : '<div class="muted" style="margin-top:8px;">Keine Frage ausgewählt.</div>'}
+        <div class="percent-question-list">
+          ${game.questions.map((question) => percentQuestionAdminButton(question, game.selectedQuestionId)).join('')}
+        </div>
+      </div>`;
+  }
+
+  function percentSelectedAdmin(question, game, players, answers) {
+    const answered = players.filter((player) => answers[player.id]).length;
+    const payouts = percentPayoutsFor(game, question.id);
+    return `
+      <div class="game-detail mini percent-selected-admin">
+        <div>
+          <b>${esc(question.label)}</b>
+          <div class="muted">${percentAnswerTypeLabel(question)} · Clip: ${esc(question.clipSrc)} · Original: ${esc(question.originalStart)}-${esc(question.originalEnd)}</div>
+          ${question.clipExists ? '' : `<div style="margin-top:6px;color:#ffd15c;font-weight:900;">Clip-Datei fehlt: ${esc(question.clipSrc)}</div>`}
+          <div class="muted">${answered}/${players.length} Spieler haben eingeloggt.</div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="good" data-percent-action="start-clip">Clip starten</button>
+          <button data-percent-action="pause-clip">Clip pausieren</button>
+          <button data-percent-action="restart-clip">Clip von vorne starten</button>
+          <button class="${game.answersOpen ? '' : 'primary'}" data-percent-action="open-answers">Antworten öffnen</button>
+          <button data-percent-action="close-answers">Antworten schließen</button>
+          <button data-percent-action="reset-answers">Antworten zurücksetzen</button>
+          <button class="primary" data-percent-action="show-results">Auswertung anzeigen</button>
+          <button data-percent-action="back-to-selection">Zurück zur Frageauswahl</button>
+        </div>
+        ${percentSolutionAdmin(question, game)}
+        <div class="spin-admin-list" style="margin-top:10px;">
+          ${players.map((player) => percentAnswerAdminRow(player, answers[player.id], question, game, payouts[player.id])).join('')}
+        </div>
+      </div>`;
+  }
+
+  function percentSolutionAdmin(question, game) {
+    const visible = game.solutionVisible && game.solutionShownForQuestionId === question.id;
+    const status = question.solutionExists
+      ? visible
+        ? 'Lösung wird angezeigt'
+        : 'Lösung nicht sichtbar'
+      : 'Screenshot fehlt';
+    return `
+      <div class="game-detail mini percent-solution-admin" style="margin-top:10px;">
+        <b>Lösung</b>
+        <div class="muted">Aktuelle Frage: ${esc(question.label)}</div>
+        <div class="muted">Screenshot: ${esc(question.solutionImageSrc || '-')}</div>
+        <div class="muted">Status: ${esc(status)}</div>
+        ${game.answersOpen ? '<div style="margin-top:6px;color:#ffd15c;font-weight:900;">Antworten sind noch offen. Beim Anzeigen der Lösung werden sie automatisch geschlossen.</div>' : ''}
+        <div class="row" style="margin-top:10px;">
+          <button class="primary" data-percent-action="show-solution" ${game.answersOpen ? 'data-percent-confirm-open="1"' : ''}>Lösung anzeigen</button>
+          <button data-percent-action="hide-solution" ${visible ? '' : 'disabled'}>Lösung ausblenden</button>
+          <button data-percent-action="show-results">Zur Auswertung</button>
+        </div>
+      </div>`;
+  }
+
+  function percentBettingAdmin(game, players) {
+    const lockedCount = players.filter((player) => game.betsByPlayerId[player.id] && game.betsByPlayerId[player.id].locked).length;
+    return `
+      <div class="game-detail mini percent-betting-admin">
+        <b>Einsatzphase</b>
+        <div class="muted">${lockedCount}/${players.length} Spieler haben Einsätze eingeloggt.</div>
+        <div class="row" style="margin-top:10px;">
+          <button class="primary" data-percent-action="open-betting">Einsatzphase öffnen</button>
+          <button data-percent-action="close-betting">Einsatzphase schließen</button>
+          <button data-percent-action="reset-bets">Einsätze zurücksetzen</button>
+          <button data-percent-action="unlock-bets">Einsätze entsperren</button>
+          <button class="good" data-percent-action="continue-to-quiz">Weiter zum Quiz</button>
+        </div>
+        <div class="spin-admin-list" style="margin-top:10px;">
+          ${players.map((player) => percentBetPlayerRow(player, game)).join('')}
+        </div>
+      </div>`;
+  }
+
+  function percentBetPlayerRow(player, game) {
+    const entry = game.betsByPlayerId[player.id] || { locked: false, bets: {} };
+    const debited = game.debitedBetsByPlayerId[player.id];
+    const summary = percentBetSummary(percentEffectiveBettingBalance(player, debited), game.questions, entry.bets || {});
+    return `
+      <div class="game-detail mini">
+        <b style="color:${player.color}">${esc(player.name)}</b>
+        <div class="muted">
+          Kontostand: ${percentFormatChips(player.score)} · gesetzt: ${percentFormatChips(summary.total)} · verbleibend: ${percentFormatChips(summary.remaining)} · alles richtig: ${percentFormatChips(summary.maxBalance)}
+        </div>
+        <div class="muted">Eingeloggt: ${entry.locked ? 'Ja' : 'Nein'}${debited ? ` · abgezogen: ${percentFormatChips(debited.amount)}` : ''}</div>
+        <div class="muted">${game.questions.map((question) => `${esc(question.label)}: ${percentFormatChips(entry.bets && entry.bets[question.id])}`).join(' · ')}</div>
+      </div>`;
+  }
+
+  function percentQuestionAdminButton(question, selectedQuestionId) {
+    return `
+      <button class="${question.id === selectedQuestionId ? 'primary' : ''}" data-percent-question="${esc(question.id)}">
+        <b>${esc(question.label)}</b>
+        <span>${question.percent}% · ${percentAnswerTypeLabel(question)} · ${esc(question.clipSrc)} · ${esc(question.originalStart)}-${esc(question.originalEnd)}${question.clipExists ? '' : ' · Clip fehlt'}</span>
+      </button>`;
+  }
+
+  function percentAnswerAdminRow(player, answer, question, game, payout) {
+    const bet = percentBetFor(game, player.id, question.id);
+    const potential = percentChipPayout(bet * Number(question.multiplier || 1));
+    const locked = payout && payout.applied;
+    return `
+      <div class="game-detail mini">
+        <b style="color:${player.color}">${esc(player.name)}</b>
+        <div class="muted">Antwort: ${answer ? esc(percentFormatAnswer(answer.answer)) : 'noch offen'} · Einsatz: ${percentFormatChips(bet)} · x${percentFormatMultiplier(question.multiplier)} · Auszahlung: ${payout ? percentFormatChips(payout.payoutAmount) : percentFormatChips(potential)}</div>
+        <div class="row" style="margin-top:6px;">
+          ${locked
+            ? `<span class="muted">Bewertet: ${payout.isCorrect ? 'Richtig' : 'Falsch'} · angewendet</span>`
+            : `
+              <button class="good" data-percent-eval-player="${player.id}" data-percent-eval-question="${question.id}" data-percent-correct="1">Richtig</button>
+              <button class="bad" data-percent-eval-player="${player.id}" data-percent-eval-question="${question.id}" data-percent-correct="0">Falsch</button>
+            `}
+        </div>
+      </div>`;
+  }
+
+  function percentQuizState(state) {
+    const raw = state.gameState && typeof state.gameState === 'object' ? state.gameState : {};
+    return {
+      selectedQuestionId: raw.selectedQuestionId || null,
+      phase: raw.phase || 'idle',
+      answersOpen: raw.answersOpen === true,
+      clipPlayback: raw.clipPlayback || {},
+      answersByQuestionId: raw.answersByQuestionId || {},
+      betsByPlayerId: raw.betsByPlayerId || {},
+      debitedBetsByPlayerId: raw.debitedBetsByPlayerId || {},
+      payoutsByQuestionId: raw.payoutsByQuestionId || {},
+      solutionVisible: raw.solutionVisible === true,
+      solutionShownForQuestionId: raw.solutionShownForQuestionId || null,
+      questions: Array.isArray(raw.questions) ? raw.questions : [],
+      adminWarning: String(raw.adminWarning || ''),
+    };
+  }
+
+  function percentAnswersFor(game, questionId) {
+    return (game.answersByQuestionId && game.answersByQuestionId[questionId]) || {};
+  }
+
+  function percentPayoutsFor(game, questionId) {
+    return (game.payoutsByQuestionId && game.payoutsByQuestionId[questionId]) || {};
+  }
+
+  function percentBetFor(game, playerId, questionId) {
+    const entry = game.betsByPlayerId[playerId];
+    return Number(entry && entry.bets && entry.bets[questionId]) || 0;
+  }
+
+  function percentPhaseLabel(phase) {
+    return {
+      idle: 'Keine Frage',
+      betting: 'Einsatzphase offen',
+      bettingLocked: 'Einsatzphase geschlossen',
+      selected: 'Frage ausgewählt',
+      playing: 'Clip läuft',
+      answering: 'Antworten offen',
+      locked: 'Antworten geschlossen',
+      results: 'Auswertung',
+      payout: 'Auszahlung',
+    }[phase] || phase || '-';
+  }
+
+  function percentAnswerTypeLabel(question) {
+    if (!question) return '-';
+    if (question.answerType === 'choice') return `Multiple Choice ${question.options.join('/')}`;
+    if (question.answerType === 'number') return 'Zahleneingabe';
+    if (question.answerType === 'grid') return `${question.gridCols}x${question.gridRows}-Grid`;
+    return question.answerType || '-';
+  }
+
+  function percentFormatAnswer(answer) {
+    return /^R\dC\d$/.test(answer) ? answer.replace('R', 'Reihe ').replace('C', ', Spalte ') : answer;
+  }
+
+  function percentBetSummary(balance, questions, bets) {
+    const total = Object.values(bets || {}).reduce((sum, value) => sum + percentNormalizedBet(value), 0);
+    const maxPayout = questions.reduce((sum, question) => {
+      const bet = percentNormalizedBet(bets && bets[question.id]);
+      return sum + percentChipPayout(bet * Number(question.multiplier || 1));
+    }, 0);
+    return {
+      total,
+      remaining: Math.max(0, (Number(balance) || 0) - total),
+      maxBalance: percentChipPayout((Number(balance) || 0) - total + maxPayout),
+    };
+  }
+
+  function percentEffectiveBettingBalance(player, debit) {
+    return (Number(player.score) || 0) + (Number(debit && debit.amount) || 0);
+  }
+
+  function percentNormalizedBet(value) {
+    return Math.max(0, Math.floor(Number(value) || 0));
+  }
+
+  function percentChipPayout(value) {
+    return Math.ceil(Number(value) || 0);
+  }
+
+  function percentFormatMultiplier(value) {
+    return Number(value || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  }
+
+  function percentFormatChips(value) {
+    return Number(value || 0).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  }
+
+  function musikErratenPlaylistAdminControls(state) {
+    if (!state.activeGame || state.activeGame.id !== 'musik-erraten') return '';
+    const game = musikErratenState(state);
+    const winner = game.winnerPlayerId ? playerName(state, game.winnerPlayerId) : '';
+    const selectedSong = game.songs[game.currentSongIndex] || null;
+
+    return `
+      <div class="game-detail" style="margin-top:10px;">
+        <b>Musik erraten</b>
+        <div class="muted">Status: ${game.isSongRevealed ? 'Songtitel sichtbar' : 'Musik läuft'} · Song ${game.currentSongIndex + 1}/${game.songs.length} · Ziel: ${game.targetScore} Punkte</div>
+        ${winner ? `<div style="margin-top:8px;color:var(--accent);font-weight:900;">Gewinner: ${esc(winner)}</div>` : ''}
+        ${game.adminWarning ? `<div style="margin-top:8px;color:#ffd15c;font-weight:900;">${esc(game.adminWarning)}</div>` : ''}
+        ${selectedSong && selectedSong.coverImageUrl ? `
+          <div class="musik-admin-current">
+            <img src="${esc(selectedSong.coverImageUrl)}" alt="" />
+            <div>
+              <b>${game.currentSongIndex + 1}. ${esc(selectedSong.title)}</b>
+              <div class="muted">Cover wird beim Aufdecken auf dem TV-Hintergrund gezeigt.</div>
+            </div>
+          </div>` : ''}
+        <label class="admin-field-label" for="musik-song-title">Songtitel</label>
+        <input id="musik-song-title" class="admin-text-input" type="text" maxlength="120"
+          placeholder="z. B. Bohemian Rhapsody" value="${esc(game.currentSongTitle)}" data-musik-title />
+        <div class="row" style="margin-top:10px;">
+          <button class="primary" data-musik-action="reveal-song">Songtitel aufdecken</button>
+          <button data-musik-action="hide-song">Musik läuft anzeigen</button>
+          <button data-musik-action="previous-song" ${game.currentSongIndex <= 0 ? 'disabled' : ''}>Vorheriger Song</button>
+          <button data-musik-action="next-song" ${game.currentSongIndex >= game.songs.length - 1 ? 'disabled' : ''}>Nächster Song</button>
+          <button data-musik-action="reset">Runde zurücksetzen</button>
+        </div>
+        <div class="musik-admin-song-list">
+          ${game.songs.map((song, index) => `
+            <button class="${index === game.currentSongIndex ? 'primary' : ''}" data-musik-song-index="${index}">
+              <span>${index + 1}.</span> ${esc(song.title)}
+            </button>
+          `).join('')}
+        </div>
+        <div class="spin-admin-list" style="margin-top:10px;">
+          ${state.players.map((player) => musikErratenPlayerRow(player, game)).join('')}
+        </div>
+      </div>`;
+  }
+
+  function musikErratenAdminControls(state) {
+    if (!state.activeGame || state.activeGame.id !== 'musik-erraten') return '';
+    const game = musikErratenState(state);
+    const winner = game.winnerPlayerId ? playerName(state, game.winnerPlayerId) : '';
+
+    return `
+      <div class="game-detail" style="margin-top:10px;">
+        <b>Musik erraten</b>
+        <div class="muted">Status: ${game.isSongRevealed ? 'Songtitel sichtbar' : 'Musik läuft'} · Ziel: ${game.targetScore} Punkte</div>
+        ${winner ? `<div style="margin-top:8px;color:var(--accent);font-weight:900;">Gewinner: ${esc(winner)}</div>` : ''}
+        ${game.adminWarning ? `<div style="margin-top:8px;color:#ffd15c;font-weight:900;">${esc(game.adminWarning)}</div>` : ''}
+        <label class="admin-field-label" for="musik-song-title">Songtitel</label>
+        <input id="musik-song-title" class="admin-text-input" type="text" maxlength="120"
+          placeholder="z. B. Bohemian Rhapsody" value="${esc(game.currentSongTitle)}" data-musik-title />
+        <div class="row" style="margin-top:10px;">
+          <button class="primary" data-musik-action="reveal-song">Songtitel aufdecken</button>
+          <button data-musik-action="hide-song">Musik läuft anzeigen</button>
+          <button data-musik-action="reset">Runde zurücksetzen</button>
+        </div>
+        <div class="spin-admin-list" style="margin-top:10px;">
+          ${state.players.map((player) => musikErratenPlayerRow(player, game)).join('')}
+        </div>
+      </div>`;
+  }
+
+  function musikErratenPlayerRow(player, game) {
+    const target = game.targetScore || 5;
+    const score = Math.max(0, Math.min(target, Number(game.playerScores[player.id]) || 0));
+    const winner = game.winnerPlayerId === player.id;
+    return `
+      <div class="game-detail mini">
+        <div>
+          <b style="color:${player.color}">${esc(player.name)}</b>
+          · ${score}/${target} Punkte
+          ${winner ? '<span style="color:var(--accent);font-weight:900;"> · Gewonnen</span>' : ''}
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <button class="bad" data-musik-player="${player.id}" data-musik-action="remove-point" ${score <= 0 ? 'disabled' : ''}>-1 Punkt</button>
+          <button class="good" data-musik-player="${player.id}" data-musik-action="add-point" ${score >= target ? 'disabled' : ''}>+1 Punkt</button>
+        </div>
+      </div>`;
+  }
+
+  function musikErratenState(state) {
+    const raw = state.gameState && typeof state.gameState === 'object' ? state.gameState : {};
+    return {
+      currentSongTitle: String(raw.currentSongTitle || ''),
+      currentSongIndex: Number(raw.currentSongIndex) || 0,
+      currentSongCoverImageUrl: String(raw.currentSongCoverImageUrl || ''),
+      isSongRevealed: raw.isSongRevealed === true,
+      playerScores: raw.playerScores && typeof raw.playerScores === 'object' ? raw.playerScores : {},
+      winnerPlayerId: raw.winnerPlayerId || null,
+      targetScore: Number(raw.targetScore) || 5,
+      adminWarning: String(raw.adminWarning || ''),
+      songs: Array.isArray(raw.songs) && raw.songs.length ? raw.songs : [],
+    };
   }
 
   function woLiegtWasAdminControls(state) {
@@ -499,6 +822,107 @@
           App.socket.emit('game:action', { type });
         }
       };
+    });
+  }
+
+  function wireMusikErratenAdminControls() {
+    const titleInput = activeGameEl.querySelector('[data-musik-title]');
+    if (titleInput) {
+      titleInput.onchange = () =>
+        App.socket.emit('game:action', {
+          type: 'musik:set-song-title',
+          title: titleInput.value,
+        });
+      titleInput.onkeydown = (event) => {
+        if (event.key === 'Enter') {
+          titleInput.blur();
+        }
+      };
+    }
+
+    activeGameEl.querySelectorAll('[data-musik-action]').forEach((button) => {
+      button.onclick = () => {
+        const action = button.dataset.musikAction;
+        const payload = {
+          type: `musik:${action}`,
+        };
+        if (button.dataset.musikPlayer) {
+          payload.playerId = button.dataset.musikPlayer;
+        }
+        if (action === 'reveal-song' || action === 'set-song-title') {
+          payload.title = titleInput ? titleInput.value : '';
+        }
+        App.socket.emit('game:action', payload);
+      };
+    });
+  }
+
+  function wireMusikErratenPlaylistAdminControls() {
+    const titleInput = activeGameEl.querySelector('[data-musik-title]');
+    if (titleInput) {
+      titleInput.onchange = () =>
+        App.socket.emit('game:action', {
+          type: 'musik:set-song-title',
+          title: titleInput.value,
+        });
+      titleInput.onkeydown = (event) => {
+        if (event.key === 'Enter') {
+          titleInput.blur();
+        }
+      };
+    }
+
+    activeGameEl.querySelectorAll('[data-musik-action]').forEach((button) => {
+      button.onclick = () => {
+        const action = button.dataset.musikAction;
+        const payload = {
+          type: `musik:${action}`,
+        };
+        if (button.dataset.musikPlayer) {
+          payload.playerId = button.dataset.musikPlayer;
+        }
+        if (action === 'reveal-song' || action === 'set-song-title') {
+          payload.title = titleInput ? titleInput.value : '';
+        }
+        App.socket.emit('game:action', payload);
+      };
+    });
+
+    activeGameEl.querySelectorAll('[data-musik-song-index]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: 'musik:select-song',
+          index: Number(button.dataset.musikSongIndex),
+        });
+    });
+  }
+
+  function wirePercentQuizAdminControls() {
+    activeGameEl.querySelectorAll('[data-percent-question]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: 'percent:select-question',
+          questionId: button.dataset.percentQuestion,
+        });
+    });
+
+    activeGameEl.querySelectorAll('[data-percent-action]').forEach((button) => {
+      button.onclick = () => {
+        if (button.dataset.percentConfirmOpen === '1' && !confirm('Antworten sind noch offen. Lösung trotzdem anzeigen?')) return;
+        App.socket.emit('game:action', {
+          type: `percent:${button.dataset.percentAction}`,
+        });
+      };
+    });
+
+    activeGameEl.querySelectorAll('[data-percent-eval-player]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: 'percent:evaluate-answer',
+          playerId: button.dataset.percentEvalPlayer,
+          questionId: button.dataset.percentEvalQuestion,
+          isCorrect: button.dataset.percentCorrect === '1',
+        });
     });
   }
 

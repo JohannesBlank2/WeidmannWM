@@ -57,6 +57,7 @@ app.use('/play', express.static(path.join(ROOT, 'public', 'play')));
 app.use('/admin', express.static(path.join(ROOT, 'public', 'admin')));
 app.use('/games', express.static(path.join(ROOT, 'games')));
 app.use('/assets', express.static(path.join(ROOT, 'assets')));
+app.use('/clips', express.static(path.join(ROOT, 'public', 'clips')));
 
 // REST: Liste der registrierten Spiele (für Admin, falls ohne Socket gebraucht).
 app.get('/api/games', (req, res) => res.json(registry.list()));
