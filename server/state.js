@@ -51,11 +51,23 @@ const CRASH_MIN_POINT = 120;
 const CRASH_MAX_POINT = 1000;
 const CRASH_TICK_MS = 75;
 const CRASH_MAX_STAKE = 100;
+const CRASH_DEFAULT_SETTINGS = {
+  minCrashPoint: CRASH_MIN_POINT / 100,
+  maxCrashPoint: CRASH_MAX_POINT / 100,
+  growthSpeed: 1,
+};
+const AMBIENT_TRACK_IDS = ['pick-your-poison', 'hide', 'blind-spot', 'poker-ambiente'];
+const DEFAULT_AMBIENT_MUSIC = {
+  enabled: false,
+  trackId: AMBIENT_TRACK_IDS[0],
+  volume: 32,
+  updatedAt: null,
+};
 const FEATURED_GAMES = [
-  { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', animation: 'slot', durationMs: 6200 },
-  { slot: 2, gameId: 'fehlersuche', title: '2016?', animation: 'roulette', durationMs: 4600 },
-  { slot: 3, gameId: 'cornhole', title: 'Cornhole', animation: 'cards', durationMs: 4300 },
-  { slot: 4, gameId: 'musik-erraten', title: 'Shazam', animation: 'wheel', durationMs: 5200 },
+  { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sachen', animation: 'slot', durationMs: 6200 },
+  { slot: 2, gameId: 'musik-erraten', title: 'Shazam', animation: 'wheel', durationMs: 5200 },
+  { slot: 3, gameId: 'wo-liegt-was', title: 'Wo liegt was?', animation: 'roulette', durationMs: 4600 },
+  { slot: 4, gameId: 'dart-ringe', title: 'Dartringe', animation: 'cards', durationMs: 4300 },
   { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', animation: 'scratch', durationMs: 5600 },
 ];
 const RANK_AWARDS = {
@@ -121,6 +133,7 @@ function defaultCrashGame(players = []) {
     startedAt: null,
     crashedAt: null,
     payoutApplied: false,
+    settings: { ...CRASH_DEFAULT_SETTINGS },
     players: buildCrashPlayers(players),
   };
 }
@@ -144,6 +157,7 @@ function defaultState() {
     gameState: {},
     currentMiniGame: null,
     crashGame: defaultCrashGame(players),
+    ambientMusic: { ...DEFAULT_AMBIENT_MUSIC },
     meta: {
       history: [],
       featuredGameTitles: {},
@@ -205,6 +219,7 @@ class GameState {
         consumedGames: Array.isArray(saved.consumedGames) ? saved.consumedGames : [],
         currentMiniGame: saved.currentMiniGame === 'crash' ? 'crash' : null,
         crashGame: normalizeCrashGame(saved.crashGame, players),
+        ambientMusic: normalizeAmbientMusic(saved.ambientMusic),
         meta: normalizeMeta(saved.meta, base.meta),
       };
 
@@ -306,9 +321,7 @@ class GameState {
   }
 
   _featuredTitle(entry, meta) {
-    const titles = (this.state.meta && this.state.meta.featuredGameTitles) || {};
-    const override = titles[String(entry.slot)] || titles[entry.gameId];
-    return override || (meta ? meta.title : entry.title);
+    return entry.title || (meta ? meta.title : '');
   }
 
   _withFeaturedTitle(meta, entry) {
@@ -317,36 +330,8 @@ class GameState {
     return { ...meta, name: title, title };
   }
 
-  setFeaturedGameTitle(slot, title) {
-    const featured = FEATURED_GAMES.find((entry) => entry.slot === Number(slot));
-    if (!featured) return false;
-
-    const value = String(title || '').trim().slice(0, 80);
-    this.state.meta.featuredGameTitles = {
-      ...(this.state.meta.featuredGameTitles || {}),
-    };
-
-    if (value) {
-      this.state.meta.featuredGameTitles[String(featured.slot)] = value;
-    } else {
-      delete this.state.meta.featuredGameTitles[String(featured.slot)];
-    }
-
-    const nextTitle = this._featuredTitle(featured, this.registry && this.registry.meta(featured.gameId));
-    const applyTitle = (game) => {
-      if (!game || game.id !== featured.gameId) return game;
-      return { ...game, name: nextTitle, title: nextTitle };
-    };
-
-    this.state.round.selectedGame = applyTitle(this.state.round.selectedGame);
-    this.state.round.choices = (this.state.round.choices || []).map((choice) => {
-      const id = choice.gameId || choice.id;
-      return id === featured.gameId ? { ...choice, name: nextTitle, title: nextTitle } : choice;
-    });
-    this.state.activeGame = applyTitle(this.state.activeGame);
-
-    this.touch();
-    return true;
+  setFeaturedGameTitle() {
+    return false;
   }
 
   _applyFeaturedTitleOverridesToState() {
@@ -619,6 +604,16 @@ class GameState {
     this.state.buzzer.status = BUZZER.LOCKED;
     this.state.buzzer.presses = [];
     this.touch();
+  }
+
+  setAmbientMusic(patch = {}) {
+    this.state.ambientMusic = normalizeAmbientMusic({
+      ...(this.state.ambientMusic || DEFAULT_AMBIENT_MUSIC),
+      ...(patch || {}),
+      updatedAt: Date.now(),
+    });
+    this.touch();
+    return true;
   }
 
   registerBuzz(clientId) {
@@ -912,12 +907,30 @@ class GameState {
   prepareCrashGame(stakes = {}) {
     if (this.state.crashGame && this.state.crashGame.phase === 'running') return false;
     this._clearCrashTimer();
+    const settings = normalizeCrashSettings(this.state.crashGame && this.state.crashGame.settings);
     this.state.currentMiniGame = 'crash';
     this.state.crashGame = {
       ...defaultCrashGame(this.state.players),
       phase: 'ready',
+      settings,
       players: buildCrashPlayers(this.state.players, stakes),
     };
+    this.touch();
+    return true;
+  }
+
+  setCrashSettings(settings = {}) {
+    if (!this.state.crashGame || this.state.crashGame.phase === 'idle') {
+      this.prepareCrashGame();
+    }
+
+    const crash = this.state.crashGame;
+    if (!crash || crash.phase !== 'ready') return false;
+
+    crash.settings = normalizeCrashSettings({
+      ...(crash.settings || {}),
+      ...(settings || {}),
+    });
     this.touch();
     return true;
   }
@@ -965,7 +978,8 @@ class GameState {
       ...crash,
       phase: 'running',
       multiplier: 1,
-      crashPoint: randomCrashPoint(),
+      settings: normalizeCrashSettings(crash.settings),
+      crashPoint: randomCrashPoint(crash.settings),
       startedAt: Date.now(),
       crashedAt: null,
       payoutApplied: false,
@@ -985,7 +999,7 @@ class GameState {
       ),
     };
     this.touch();
-    this._scheduleCrashTick(CRASH_TICK_MS);
+    this._scheduleCrashTick(this._crashTickMs(this.state.crashGame));
     return true;
   }
 
@@ -1017,8 +1031,12 @@ class GameState {
 
   resetCrashGame() {
     this._clearCrashTimer();
+    const settings = normalizeCrashSettings(this.state.crashGame && this.state.crashGame.settings);
     this.state.currentMiniGame = null;
-    this.state.crashGame = defaultCrashGame(this.state.players);
+    this.state.crashGame = {
+      ...defaultCrashGame(this.state.players),
+      settings,
+    };
     this.touch();
     return true;
   }
@@ -1044,13 +1062,19 @@ class GameState {
 
     crash.multiplier = nextMultiplier;
     this.touch();
-    this._scheduleCrashTick(CRASH_TICK_MS);
+    this._scheduleCrashTick(this._crashTickMs(crash));
   }
 
   _liveCrashMultiplier(crash) {
     const startedAt = Number(crash && crash.startedAt) || Date.now();
-    const elapsedSeconds = Math.max(0, (Date.now() - startedAt) / 1000);
+    const settings = normalizeCrashSettings(crash && crash.settings);
+    const elapsedSeconds = Math.max(0, ((Date.now() - startedAt) / 1000) * settings.growthSpeed);
     return round2(1 + 0.025 * elapsedSeconds + 0.006 * elapsedSeconds ** 2 + 0.0016 * elapsedSeconds ** 3);
+  }
+
+  _crashTickMs(crash) {
+    const settings = normalizeCrashSettings(crash && crash.settings);
+    return clampInt(CRASH_TICK_MS / Math.sqrt(settings.growthSpeed), 25, 180);
   }
 
   _finishCrashRound() {
@@ -1123,12 +1147,14 @@ class GameState {
     }));
     const clients = this.state.clients;
     const meta = this.state.meta;
+    const ambientMusic = this.state.ambientMusic;
     this._clearSpinTimer();
     this._clearCrashTimer();
     this.state = defaultState();
     this.state.players = players;
     this.state.clients = clients;
     this.state.meta = normalizeMeta(meta, this.state.meta);
+    this.state.ambientMusic = normalizeAmbientMusic(ambientMusic);
     this.touch();
   }
 
@@ -1263,11 +1289,15 @@ function normalizeCrashGame(crashGame, players) {
     startedAt: Number(crashGame.startedAt) || null,
     crashedAt: Number(crashGame.crashedAt) || null,
     payoutApplied: crashGame.payoutApplied === true,
+    settings: normalizeCrashSettings(crashGame.settings),
     players: normalizeCrashPlayers(crashGame.players, players),
   };
 
   if (phase === 'idle') {
-    return defaultCrashGame(players);
+    return {
+      ...defaultCrashGame(players),
+      settings: normalized.settings,
+    };
   }
 
   if (phase === 'ready') {
@@ -1405,6 +1435,25 @@ function normalizeMeta(meta, baseMeta = { history: [], featuredGameTitles: {} })
   };
 }
 
+function normalizeAmbientMusic(value) {
+  const saved = value && typeof value === 'object' ? value : {};
+  const trackId = AMBIENT_TRACK_IDS.includes(String(saved.trackId || ''))
+    ? String(saved.trackId)
+    : DEFAULT_AMBIENT_MUSIC.trackId;
+  const volume = clampInt(
+    saved.volume == null ? DEFAULT_AMBIENT_MUSIC.volume : saved.volume,
+    0,
+    100
+  );
+
+  return {
+    enabled: saved.enabled === true,
+    trackId,
+    volume: Number.isFinite(volume) ? volume : DEFAULT_AMBIENT_MUSIC.volume,
+    updatedAt: Number(saved.updatedAt) || null,
+  };
+}
+
 function shuffle(items) {
   const out = [...items];
   for (let i = out.length - 1; i > 0; i -= 1) {
@@ -1420,8 +1469,45 @@ function clampInt(value, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
-function randomCrashPoint() {
-  return round2(crypto.randomInt(CRASH_MIN_POINT, CRASH_MAX_POINT + 1) / 100);
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function normalizeCrashSettings(settings) {
+  const saved = settings && typeof settings === 'object' ? settings : {};
+  const minCrashPoint = clampNumber(
+    saved.minCrashPoint,
+    1.01,
+    50,
+    CRASH_DEFAULT_SETTINGS.minCrashPoint
+  );
+  const maxCrashPoint = clampNumber(
+    saved.maxCrashPoint,
+    minCrashPoint,
+    50,
+    CRASH_DEFAULT_SETTINGS.maxCrashPoint
+  );
+  const growthSpeed = clampNumber(
+    saved.growthSpeed,
+    0.2,
+    5,
+    CRASH_DEFAULT_SETTINGS.growthSpeed
+  );
+
+  return {
+    minCrashPoint: round2(minCrashPoint),
+    maxCrashPoint: round2(Math.max(maxCrashPoint, minCrashPoint)),
+    growthSpeed: round2(growthSpeed),
+  };
+}
+
+function randomCrashPoint(settings) {
+  const normalized = normalizeCrashSettings(settings);
+  const min = Math.round(normalized.minCrashPoint * 100);
+  const max = Math.round(normalized.maxCrashPoint * 100);
+  return round2(crypto.randomInt(min, max + 1) / 100);
 }
 
 function clampCrashStake(value) {

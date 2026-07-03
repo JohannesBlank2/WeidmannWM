@@ -10,13 +10,21 @@
   const gamesEl = document.getElementById('games');
   const activeGameEl = document.getElementById('active-game');
   const clientsEl = document.getElementById('clients');
+  const ambientMusicEl = document.getElementById('ambient-music-admin');
+  const winnerSoundBtn = document.getElementById('winner-sound-btn');
 
   const DEFAULT_FEATURED_GAMES = [
-    { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sache', defaultTitle: 'Halbe Sache', animation: 'slot' },
-    { slot: 2, gameId: 'fehlersuche', title: '2016?', defaultTitle: '2016?', animation: 'roulette' },
-    { slot: 3, gameId: 'cornhole', title: 'Cornhole', defaultTitle: 'Cornhole', animation: 'cards' },
-    { slot: 4, gameId: 'musik-erraten', title: 'Shazam', defaultTitle: 'Shazam', animation: 'wheel' },
+    { slot: 1, gameId: 'schneid-in-die-haelfte', title: 'Halbe Sachen', defaultTitle: 'Halbe Sachen', animation: 'slot' },
+    { slot: 2, gameId: 'musik-erraten', title: 'Shazam', defaultTitle: 'Shazam', animation: 'wheel' },
+    { slot: 3, gameId: 'wo-liegt-was', title: 'Wo liegt was?', defaultTitle: 'Wo liegt was?', animation: 'roulette' },
+    { slot: 4, gameId: 'dart-ringe', title: 'Dartringe', defaultTitle: 'Dartringe', animation: 'cards' },
     { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', defaultTitle: 'How much is the fish', animation: 'scratch' },
+  ];
+  const AMBIENT_TRACKS = [
+    { id: 'pick-your-poison', label: 'Pick Your Poison', file: 'pick-your-poison.mp3' },
+    { id: 'hide', label: 'Hide', file: 'hide.mp3' },
+    { id: 'blind-spot', label: 'Blind Spot', file: 'blind-spot.mp3' },
+    { id: 'poker-ambiente', label: 'Poker Ambiente (Finale)', file: 'poker-ambiente.mp3' },
   ];
 
   let games = [];
@@ -44,6 +52,64 @@
       if (event) App.socket.emit(event);
     };
   });
+
+  if (winnerSoundBtn) {
+    const winnerAudio = new Audio('/assets/audio/winner.mp3');
+    winnerAudio.preload = 'auto';
+    winnerAudio.addEventListener('ended', () => {
+      winnerSoundBtn.textContent = '▶ Winner Sound abspielen';
+      winnerSoundBtn.classList.remove('bad');
+      winnerSoundBtn.classList.add('good');
+    });
+    winnerSoundBtn.onclick = () => {
+      if (winnerAudio.paused) {
+        winnerAudio.currentTime = 0;
+        winnerAudio.play().catch(() => {});
+        winnerSoundBtn.textContent = '■ Winner Sound stoppen';
+        winnerSoundBtn.classList.remove('good');
+        winnerSoundBtn.classList.add('bad');
+      } else {
+        winnerAudio.pause();
+        winnerAudio.currentTime = 0;
+        winnerSoundBtn.textContent = '▶ Winner Sound abspielen';
+        winnerSoundBtn.classList.remove('bad');
+        winnerSoundBtn.classList.add('good');
+      }
+    };
+  }
+
+  if (ambientMusicEl) {
+    ambientMusicEl.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const enabledButton = target.closest('[data-ambient-enabled]');
+      if (enabledButton && ambientMusicEl.contains(enabledButton)) {
+        const music = ambientMusicState(App.getState() || {});
+        App.socket.emit('admin:ambient-music', {
+          enabled: enabledButton.dataset.ambientEnabled === '1',
+          trackId: music.trackId,
+        });
+        return;
+      }
+
+      const trackButton = target.closest('[data-ambient-track]');
+      if (trackButton && ambientMusicEl.contains(trackButton)) {
+        App.socket.emit('admin:ambient-music', {
+          enabled: true,
+          trackId: trackButton.dataset.ambientTrack,
+        });
+      }
+    });
+
+    ambientMusicEl.addEventListener('change', (event) => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!target || !target.matches('[data-ambient-volume]')) return;
+      App.socket.emit('admin:ambient-music', {
+        volume: Number(target.value),
+      });
+    });
+  }
 
   function renderAblauf(state) {
     phasePill.textContent = state.phase;
@@ -280,6 +346,52 @@
         .join(' &nbsp; ');
   }
 
+  function renderAmbientMusic(state) {
+    if (!ambientMusicEl) return;
+    const music = ambientMusicState(state);
+    const selected = AMBIENT_TRACKS.find((track) => track.id === music.trackId) || AMBIENT_TRACKS[0];
+    ambientMusicEl.innerHTML = `
+      <div class="ambient-admin-status">
+        <span>Status: <b>${music.enabled ? 'läuft' : 'aus'}</b></span>
+        <span>Aktuell: ${esc(selected.label)} · Lautstärke ${music.volume}%</span>
+      </div>
+      <div class="row">
+        <button class="${music.enabled ? 'bad' : 'good'}" data-ambient-enabled="${music.enabled ? '0' : '1'}">
+          ${music.enabled ? 'Ausschalten' : 'Einschalten'}
+        </button>
+      </div>
+      <div class="ambient-track-list">
+        ${AMBIENT_TRACKS.map((track) => `
+          <button class="${track.id === music.trackId && music.enabled ? 'primary' : ''}" data-ambient-track="${track.id}">
+            <b>${esc(track.label)}</b>
+            <span>${esc(track.file)}</span>
+          </button>
+        `).join('')}
+      </div>
+      <label class="ambient-volume">
+        <input type="range" min="0" max="100" step="1" value="${music.volume}" data-ambient-volume />
+        <span>${music.volume}%</span>
+      </label>
+      <div class="muted" style="font-size:.82rem; margin-top:8px;">
+        Steuerung nur hier in der Admin-Ansicht; auf dem TV bleibt der Player unsichtbar.
+      </div>`;
+  }
+
+  function ambientMusicState(state) {
+    const raw = state.ambientMusic && typeof state.ambientMusic === 'object'
+      ? state.ambientMusic
+      : {};
+    const trackId = AMBIENT_TRACKS.some((track) => track.id === raw.trackId)
+      ? raw.trackId
+      : AMBIENT_TRACKS[0].id;
+    const volume = Math.max(0, Math.min(100, Math.round(Number(raw.volume == null ? 32 : raw.volume) || 0)));
+    return {
+      enabled: raw.enabled === true,
+      trackId,
+      volume,
+    };
+  }
+
   function renderPlayers(state) {
     playersEl.innerHTML = '';
     state.players.forEach((p) => {
@@ -291,13 +403,13 @@
         <span class="ptbox">
           <span class="tag">Coins</span>
           <button class="bad" data-add="${p.id}" data-delta="-5">-5</button>
-          <span class="sc">${p.score}</span>
+          <input class="score-input" type="number" step="1" value="${p.score}" data-set-score="${p.id}" />
           <button class="good" data-add="${p.id}" data-delta="5">+5</button>
         </span>
         <span class="ptbox game">
           <span class="tag">Spiel</span>
           <button class="bad" data-gadd="${p.id}" data-delta="-5">-5</button>
-          <span class="sc">${p.gameScore}</span>
+          <input class="score-input" type="number" step="1" value="${p.gameScore}" data-set-game-score="${p.id}" />
           <button class="good" data-gadd="${p.id}" data-delta="5">+5</button>
         </span>`;
       playersEl.appendChild(row);
@@ -311,6 +423,20 @@
       b.onclick = () =>
         App.socket.emit('admin:game-points', { playerId: b.dataset.gadd, delta: Number(b.dataset.delta) });
     });
+    playersEl.querySelectorAll('[data-set-score]').forEach((inp) => {
+      inp.onchange = () =>
+        App.socket.emit('admin:set-points', { playerId: inp.dataset.setScore, value: Number(inp.value) });
+      inp.onkeydown = (event) => {
+        if (event.key === 'Enter') inp.blur();
+      };
+    });
+    playersEl.querySelectorAll('[data-set-game-score]').forEach((inp) => {
+      inp.onchange = () =>
+        App.socket.emit('admin:set-game-points', { playerId: inp.dataset.setGameScore, value: Number(inp.value) });
+      inp.onkeydown = (event) => {
+        if (event.key === 'Enter') inp.blur();
+      };
+    });
     playersEl.querySelectorAll('[data-rename]').forEach((inp) => {
       inp.onchange = () =>
         App.socket.emit('admin:rename-player', { playerId: inp.dataset.rename, name: inp.value });
@@ -320,7 +446,7 @@
   function renderGames(state) {
     const activeId = state.activeGame && state.activeGame.id;
     activeGameEl.innerHTML = state.activeGame
-      ? `Aktiv: <b>${esc(state.activeGame.title || state.activeGame.name)}</b>${woLiegtWasAdminControls(state)}${musikErratenPlaylistAdminControls(state)}${percentQuizAdminControls(state)}`
+      ? `Aktiv: <b>${esc(state.activeGame.title || state.activeGame.name)}</b>${fishAdminControls(state)}${halbeSachenAdminControls(state)}${dartRingeAdminControls(state)}${woLiegtWasAdminControls(state)}${musikErratenPlaylistAdminControls(state)}${percentQuizAdminControls(state)}`
       : 'Kein Spiel aktiv.';
 
     gamesEl.innerHTML =
@@ -340,9 +466,454 @@
     gamesEl.querySelectorAll('[data-start]').forEach((b) => {
       b.onclick = () => App.socket.emit('admin:start-game', { gameId: b.dataset.start });
     });
+    wireFishAdminControls();
     wireWoLiegtWasAdminControls();
+    wireHalbeSachenAdminControls();
+    wireDartRingeAdminControls();
     wireMusikErratenPlaylistAdminControls();
     wirePercentQuizAdminControls();
+  }
+
+  function fishAdminControls(state) {
+    if (!state.activeGame || state.activeGame.id !== 'einkauf-schaetzen') return '';
+    const game = fishState(state);
+    const box = fishSelectedBox(game);
+    const answers = box ? fishAnswersFor(game, box.id) : {};
+    const answered = state.players.filter((player) => answers[player.id]).length;
+    const total = fishBoxTotalCents(box);
+    const completePrices = total != null;
+    const revealed = game.guessesRevealed || game.solutionRevealed || game.phase === 'result';
+
+    return `
+      <div class="game-detail fish-admin" style="margin-top:10px;">
+        <b>How much is the fish</b>
+        <div class="muted">Status: ${fishPhaseLabel(game)} · ${answered}/${state.players.length} Schätzungen · Lösung ${completePrices ? fishFormatEuro(total) : 'unvollständig'}</div>
+        <div class="row" style="margin-top:10px;">
+          ${game.boxes.map((entry) => `
+            <button class="${box && box.id === entry.id ? 'primary' : ''}" data-fish-box="${entry.id}">
+              ${esc(entry.label)}
+            </button>
+          `).join('')}
+        </div>
+        ${box ? fishBoxAdmin(box) : '<div class="muted" style="margin-top:8px;">Keine Box vorbereitet.</div>'}
+        <div class="row" style="margin-top:10px;">
+          <button class="${game.answersOpen ? '' : 'good'}" data-fish-action="open-input">Eingabe öffnen</button>
+          <button data-fish-action="close-input">Eingabe schließen</button>
+          <button class="primary" data-fish-action="reveal-guesses" ${answered ? '' : 'disabled'}>Tipps anzeigen</button>
+          <button class="primary" data-fish-action="reveal-solution" ${completePrices ? '' : 'disabled'}>Lösung aufdecken</button>
+          <button class="good" data-fish-action="confirm-result" ${game.solutionRevealed && completePrices && !game.resultConfirmed ? '' : 'disabled'}>Box werten</button>
+          <button data-fish-action="next-box">Nächste Box</button>
+          <button class="bad" data-fish-action="reset-box">Box leeren</button>
+        </div>
+        ${revealed ? fishAnswersAdmin(state.players, game, box, answers) : ''}
+        ${fishTotalsAdmin(state.players, game)}
+      </div>`;
+  }
+
+  function fishBoxAdmin(box) {
+    return `
+      <div class="game-detail mini fish-box-admin" style="margin-top:10px;">
+        <b>${esc(box.label)}</b>
+        <div class="spin-admin-list" style="margin-top:8px;">
+          ${(box.items || []).map((item, index) => `
+            <div class="fish-item-admin">
+              <label>
+                <span>Gegenstand ${index + 1}</span>
+                <input type="text" value="${esc(item.name)}" data-fish-item-name="${index}" data-fish-box-id="${box.id}" />
+              </label>
+              <label>
+                <span>Preis</span>
+                <input type="number" min="0" step="0.01" inputmode="decimal" value="${fishPriceInputValue(item.priceCents)}"
+                  data-fish-item-price="${index}" data-fish-box-id="${box.id}" />
+              </label>
+            </div>
+          `).join('')}
+        </div>
+        <div class="muted" style="margin-top:8px;">Gesamt: <b>${fishBoxTotalCents(box) == null ? '-' : fishFormatEuro(fishBoxTotalCents(box))}</b></div>
+      </div>`;
+  }
+
+  function fishAnswersAdmin(players, game, box, answers) {
+    const results = Array.isArray(game.results) ? game.results : [];
+    return `
+      <div class="spin-admin-list" style="margin-top:10px;">
+        ${players.map((player) => {
+          const answer = answers[player.id];
+          const result = results.find((entry) => entry.playerId === player.id) || {};
+          const winner = (game.winnerPlayerIds || []).includes(player.id) && game.solutionRevealed;
+          return `
+            <div class="game-detail mini ${winner ? 'fish-admin-winner' : ''}">
+              <b style="color:${player.color}">${esc(player.name)}</b>
+              <div class="muted">Tipp: ${answer ? fishFormatEuro(answer.amountCents) : 'Keine Eingabe'}</div>
+              ${game.solutionRevealed ? `<div class="muted">${result.noAnswerPenalty ? 'Strafe' : 'Abweichung'}: ${result.differenceCents == null ? '-' : fishFormatEuro(result.differenceCents)}</div>` : ''}
+            </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  function fishTotalsAdmin(players, game) {
+    const totals = game.totals || {};
+    const scored = Number(game.scoredRounds) || 0;
+    const rows = players
+      .map((player) => ({ player, total: Number(totals[player.id]) || 0 }))
+      .sort((a, b) => a.total - b.total);
+    return `
+      <div class="game-detail mini" style="margin-top:10px;">
+        <b>Gesamtwertung (${scored} ${scored === 1 ? 'Box' : 'Boxen'} gewertet)</b>
+        <div class="fish-total-admin-list">
+          ${rows.map((row, index) => `
+            <label class="fish-total-admin-row">
+              <span>${index + 1}. ${esc(row.player.name)}</span>
+              <input type="number" min="0" step="0.01" inputmode="decimal"
+                value="${fishPriceInputValue(row.total)}" data-fish-total="${row.player.id}" />
+            </label>
+          `).join('')}
+        </div>
+        <div class="muted">Kleinste Gesamtabweichung gewinnt.</div>
+      </div>`;
+  }
+
+  function wireFishAdminControls() {
+    activeGameEl.querySelectorAll('[data-fish-box]').forEach((button) => {
+      button.onclick = () => App.socket.emit('game:action', {
+        type: 'fish:select-box',
+        boxId: button.dataset.fishBox,
+      });
+    });
+
+    activeGameEl.querySelectorAll('[data-fish-item-name]').forEach((input) => {
+      input.onchange = () => App.socket.emit('game:action', {
+        type: 'fish:set-item',
+        boxId: input.dataset.fishBoxId,
+        itemIndex: Number(input.dataset.fishItemName),
+        patch: { name: input.value },
+      });
+      input.onkeydown = (event) => {
+        if (event.key === 'Enter') input.blur();
+      };
+    });
+
+    activeGameEl.querySelectorAll('[data-fish-item-price]').forEach((input) => {
+      input.onchange = () => App.socket.emit('game:action', {
+        type: 'fish:set-item',
+        boxId: input.dataset.fishBoxId,
+        itemIndex: Number(input.dataset.fishItemPrice),
+        patch: { price: input.value },
+      });
+      input.onkeydown = (event) => {
+        if (event.key === 'Enter') input.blur();
+      };
+    });
+
+    activeGameEl.querySelectorAll('[data-fish-total]').forEach((input) => {
+      input.onchange = () => App.socket.emit('game:action', {
+        type: 'fish:set-total',
+        playerId: input.dataset.fishTotal,
+        amount: input.value,
+      });
+      input.onkeydown = (event) => {
+        if (event.key === 'Enter') input.blur();
+      };
+    });
+
+    activeGameEl.querySelectorAll('[data-fish-action]').forEach((button) => {
+      button.onclick = () => {
+        const action = button.dataset.fishAction;
+        if (action === 'open-input') {
+          App.socket.emit('game:action', { type: 'fish:set-answers-open', open: true });
+        } else if (action === 'close-input') {
+          App.socket.emit('game:action', { type: 'fish:set-answers-open', open: false });
+        } else {
+          App.socket.emit('game:action', { type: `fish:${action}` });
+        }
+      };
+    });
+  }
+
+  function fishState(state) {
+    const raw = state.gameState && typeof state.gameState === 'object' ? state.gameState : {};
+    return {
+      phase: raw.phase || 'setup',
+      selectedBoxId: raw.selectedBoxId || 'box1',
+      boxes: Array.isArray(raw.boxes) ? raw.boxes : [],
+      answersOpen: raw.answersOpen === true,
+      guessesRevealed: raw.guessesRevealed === true,
+      solutionRevealed: raw.solutionRevealed === true,
+      resultConfirmed: raw.resultConfirmed === true,
+      answersByBoxId: raw.answersByBoxId && typeof raw.answersByBoxId === 'object' ? raw.answersByBoxId : {},
+      results: Array.isArray(raw.results) ? raw.results : [],
+      winnerPlayerIds: Array.isArray(raw.winnerPlayerIds) ? raw.winnerPlayerIds : [],
+      totals: raw.totals && typeof raw.totals === 'object' ? raw.totals : {},
+      scoredRounds: Number(raw.scoredRounds) || 0,
+    };
+  }
+
+  function fishSelectedBox(game) {
+    return game.boxes.find((box) => box.id === game.selectedBoxId) || game.boxes[0] || null;
+  }
+
+  function fishAnswersFor(game, boxId) {
+    return (game.answersByBoxId && game.answersByBoxId[boxId]) || {};
+  }
+
+  function fishBoxTotalCents(box) {
+    if (!box || !Array.isArray(box.items) || box.items.some((item) => item.priceCents == null)) return null;
+    return box.items.reduce((sum, item) => sum + Number(item.priceCents || 0), 0);
+  }
+
+  function fishPriceInputValue(cents) {
+    return cents == null ? '' : String(Math.round(Number(cents) || 0) / 100);
+  }
+
+  function fishFormatEuro(cents) {
+    return `${(Number(cents || 0) / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  }
+
+  function fishPhaseLabel(game) {
+    if (game.resultConfirmed) return 'Box gewertet';
+    if (game.solutionRevealed) return 'Lösung sichtbar';
+    if (game.guessesRevealed) return 'Tipps sichtbar';
+    if (game.answersOpen) return 'Eingabe offen';
+    return 'Vorbereitung';
+  }
+
+  function halbeSachenAdminControls(state) {
+    if (!state.activeGame || state.activeGame.id !== 'schneid-in-die-haelfte') return '';
+    const game = halbeSachenState(state);
+    const complete = state.players.filter((player) => {
+      const row = game.measurements[player.id] || {};
+      return isFiniteWeight(row.left) && isFiniteWeight(row.right);
+    }).length;
+    const revealed = ['reveal', 'result'].includes(game.phase);
+    const winnerText = halbeWinnerText(game);
+
+    return `
+      <div class="game-detail halbe-admin" style="margin-top:10px;">
+        <b>Halbe Sachen</b>
+        <div class="muted">Status: ${halbePhaseLabel(game)} · ${complete}/${state.players.length} vollständig gewogen</div>
+        ${winnerText ? `<div style="margin-top:8px;color:var(--accent);font-weight:900;">${winnerText}${game.resultConfirmed ? ' · Runde gewertet' : ''}</div>` : ''}
+        ${game.adminWarning ? `<div style="margin-top:8px;color:#ffd15c;font-weight:900;">${esc(game.adminWarning)}</div>` : ''}
+        <label class="admin-field-label" for="halbe-item">Gegenstand oder Runde</label>
+        <input id="halbe-item" class="admin-text-input" type="text" value="${esc(game.itemName)}" maxlength="80" data-halbe-item />
+        <div class="spin-admin-list" style="margin-top:10px;">
+          ${state.players.map((player) => halbePlayerAdminRow(player, game)).join('')}
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="${revealed ? '' : 'primary'}" data-halbe-action="reveal" ${complete ? '' : 'disabled'}>Waagen aufdecken</button>
+          <button class="good" data-halbe-action="confirm-result" ${revealed && complete && !game.resultConfirmed ? '' : 'disabled'}>Runde werten</button>
+          <button data-halbe-action="hide">TV verdecken</button>
+          <button data-halbe-action="next-round">Nächste Runde</button>
+          <button class="bad" data-halbe-action="reset-round">Runde leeren</button>
+        </div>
+        ${halbeTotalsAdmin(state.players, game)}
+      </div>`;
+  }
+
+  function halbePlayerAdminRow(player, game) {
+    const row = game.measurements[player.id] || {};
+    const result = (game.results || []).find((entry) => entry.playerId === player.id) || {};
+    const winner = (game.winnerPlayerIds || []).includes(player.id);
+    return `
+      <div class="game-detail mini ${winner ? 'halbe-admin-winner' : ''}">
+        <div>
+          <b style="color:${player.color}">${esc(player.name)}</b>
+          ${result.complete ? ` · Unterschied <b>${formatGramAdmin(result.difference)}</b>` : ' · offen'}
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <label class="halbe-weight-field">
+            <span>Links</span>
+            <input type="number" min="0" step="0.1" inputmode="decimal" value="${weightInputValue(row.left)}"
+              data-halbe-player="${player.id}" data-halbe-side="left" />
+          </label>
+          <label class="halbe-weight-field">
+            <span>Rechts</span>
+            <input type="number" min="0" step="0.1" inputmode="decimal" value="${weightInputValue(row.right)}"
+              data-halbe-player="${player.id}" data-halbe-side="right" />
+          </label>
+        </div>
+      </div>`;
+  }
+
+  function wireHalbeSachenAdminControls() {
+    const itemInput = activeGameEl.querySelector('[data-halbe-item]');
+    if (itemInput) {
+      itemInput.onchange = () =>
+        App.socket.emit('game:action', {
+          type: 'halbe:set-item',
+          itemName: itemInput.value,
+        });
+      itemInput.onkeydown = (event) => {
+        if (event.key === 'Enter') itemInput.blur();
+      };
+    }
+
+    activeGameEl.querySelectorAll('[data-halbe-player]').forEach((input) => {
+      input.onchange = () =>
+        App.socket.emit('game:action', {
+          type: 'halbe:set-weight',
+          playerId: input.dataset.halbePlayer,
+          side: input.dataset.halbeSide,
+          value: input.value,
+        });
+      input.onkeydown = (event) => {
+        if (event.key === 'Enter') input.blur();
+      };
+    });
+
+    activeGameEl.querySelectorAll('[data-halbe-action]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: `halbe:${button.dataset.halbeAction}`,
+        });
+    });
+  }
+
+  function halbeSachenState(state) {
+    const raw = state.gameState && typeof state.gameState === 'object' ? state.gameState : {};
+    return {
+      phase: ['reveal', 'result'].includes(raw.phase) ? raw.phase : 'cutting',
+      itemName: String(raw.itemName || 'Runde 1'),
+      measurements: raw.measurements && typeof raw.measurements === 'object' ? raw.measurements : {},
+      results: Array.isArray(raw.results) ? raw.results : [],
+      winnerPlayerIds: Array.isArray(raw.winnerPlayerIds) ? raw.winnerPlayerIds : [],
+      totals: raw.totals && typeof raw.totals === 'object' ? raw.totals : {},
+      scoredRounds: Number(raw.scoredRounds) || 0,
+      resultConfirmed: raw.resultConfirmed === true,
+      adminWarning: String(raw.adminWarning || ''),
+    };
+  }
+
+  function halbeTotalsAdmin(players, game) {
+    const scored = Number(game.scoredRounds) || 0;
+    const totals = game.totals && typeof game.totals === 'object' ? game.totals : {};
+    const rows = players
+      .map((player) => ({
+        player,
+        total: Number.isFinite(Number(totals[player.id])) ? Number(totals[player.id]) : 0,
+      }))
+      .sort((a, b) => a.total - b.total);
+
+    return `
+      <div class="game-detail mini" style="margin-top:10px;">
+        <b>Gesamtwertung (${scored} ${scored === 1 ? 'Runde' : 'Runden'} gewertet)</b>
+        ${rows.map((row, index) => `
+          <div class="muted">${index + 1}. ${esc(row.player.name)}: ${formatGramAdmin(row.total)}</div>
+        `).join('')}
+        <div class="muted">Kleinste Gesamtdifferenz gewinnt · jede Runde wird nur über „Runde werten“ addiert.</div>
+      </div>`;
+  }
+
+  function halbePhaseLabel(game) {
+    if (game.resultConfirmed) return 'Auflösung sichtbar, Runde gewertet';
+    if (['reveal', 'result'].includes(game.phase)) return 'Auflösung sichtbar';
+    return 'TV verdeckt, Gesamtwertung sichtbar';
+  }
+
+  function halbeWinnerText(game) {
+    const winners = (game.results || []).filter((result) => (game.winnerPlayerIds || []).includes(result.playerId));
+    if (!winners.length) return '';
+    const names = winners.map((result) => esc(result.playerName)).join(' & ');
+    return `Aktuell vorn: ${names} mit ${formatGramAdmin(winners[0].difference)} Unterschied`;
+  }
+
+  function isFiniteWeight(value) {
+    return value !== '' && value != null && Number.isFinite(Number(value));
+  }
+
+  function weightInputValue(value) {
+    return isFiniteWeight(value) ? String(value) : '';
+  }
+
+  function formatGramAdmin(value) {
+    if (!Number.isFinite(Number(value))) return '-';
+    return `${Number(value).toLocaleString('de-DE', { maximumFractionDigits: 2 })} g`;
+  }
+
+  function dartRingeAdminControls(state) {
+    if (!state.activeGame || state.activeGame.id !== 'dart-ringe') return '';
+    const game = dartRingeState(state);
+    const finalCount = state.players.filter((player) => dartRingePlayerRing(game, player.id) === 4).length;
+
+    return `
+      <div class="game-detail dart-ringe-admin" style="margin-top:10px;">
+        <b>Dartringe</b>
+        <div class="muted">Status: ${finalCount}/${state.players.length} Spieler am Finalring. Der gewählte Ring ist immer das aktuelle Ziel.</div>
+        <div class="spin-admin-list" style="margin-top:10px;">
+          ${state.players.map((player) => dartRingePlayerAdminRow(player, game)).join('')}
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="bad" data-dart-ringe-action="reset">Alle auf Ring 1 zurücksetzen</button>
+        </div>
+      </div>`;
+  }
+
+  function dartRingePlayerAdminRow(player, game) {
+    const current = dartRingePlayerRing(game, player.id);
+    return `
+      <div class="game-detail mini ${current === 4 ? 'dart-ringe-admin-finale' : ''}">
+        <div>
+          <b style="color:${player.color}">${esc(player.name)}</b>
+          · aktuelles Ziel: <b>${dartRingeRingLabel(current)}</b>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          ${[1, 2, 3, 4].map((ring) => `
+            <button class="${current === ring ? 'primary' : ''}"
+              data-dart-ringe-player="${player.id}" data-dart-ringe-ring="${ring}">
+              ${dartRingeRingButtonLabel(ring)}
+            </button>
+          `).join('')}
+          <button class="good" data-dart-ringe-advance="${player.id}" ${current >= 4 ? 'disabled' : ''}>Treffer · weiter</button>
+        </div>
+      </div>`;
+  }
+
+  function wireDartRingeAdminControls() {
+    activeGameEl.querySelectorAll('[data-dart-ringe-player]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: 'dart-ringe:set-ring',
+          playerId: button.dataset.dartRingePlayer,
+          ringIndex: Number(button.dataset.dartRingeRing),
+        });
+    });
+
+    activeGameEl.querySelectorAll('[data-dart-ringe-advance]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: 'dart-ringe:advance-player',
+          playerId: button.dataset.dartRingeAdvance,
+        });
+    });
+
+    activeGameEl.querySelectorAll('[data-dart-ringe-action]').forEach((button) => {
+      button.onclick = () =>
+        App.socket.emit('game:action', {
+          type: `dart-ringe:${button.dataset.dartRingeAction}`,
+        });
+    });
+  }
+
+  function dartRingeState(state) {
+    const raw = state.gameState && typeof state.gameState === 'object' ? state.gameState : {};
+    return {
+      ringPositions: raw.ringPositions && typeof raw.ringPositions === 'object' ? raw.ringPositions : {},
+    };
+  }
+
+  function dartRingePlayerRing(game, playerId) {
+    const number = Math.round(Number(game.ringPositions[playerId]) || 1);
+    return Math.max(1, Math.min(4, number));
+  }
+
+  function dartRingeRingLabel(ring) {
+    if (ring === 1) return 'Ring 1 (Gelb)';
+    if (ring === 2) return 'Ring 2 (Grün)';
+    if (ring === 3) return 'Ring 3 (Blau)';
+    return 'Ring 4 (Rot, Finale)';
+  }
+
+  function dartRingeRingButtonLabel(ring) {
+    return ring === 4 ? 'Finale' : `Ring ${ring}`;
   }
 
   function percentQuizAdminControls(state) {
@@ -945,22 +1516,18 @@
   function renderFeaturedGames(state) {
     const currentGameId = state.round && state.round.gameId;
     const introRunning = state.phase === 'spiel-intro';
-    const titleOverrides = state.meta && state.meta.featuredGameTitles
-      ? state.meta.featuredGameTitles
-      : {};
     featuredGamesEl.innerHTML =
-      '<div class="lbl">Feste Show-Spiele:</div>' +
+      '<div class="lbl">Feste Show-Reihenfolge:</div>' +
       featuredGames
         .map((game) => {
           const isCurrent = currentGameId === game.gameId &&
             ['spiel-intro', 'wetten', 'spiel-aktiv', 'auswertung'].includes(state.phase);
-          const title = titleOverrides[String(game.slot)] || titleOverrides[game.gameId] || game.defaultTitle || game.title;
+          const title = game.title || game.defaultTitle;
           return `
             <div class="featured-game-row ${isCurrent ? 'current' : ''}">
               <div class="featured-game-title">
-                <label for="featured-title-${game.slot}">Spiel ${game.slot}</label>
-                <input id="featured-title-${game.slot}" type="text" value="${esc(title)}"
-                  maxlength="80" data-featured-title="${game.slot}" />
+                <label>Spiel ${game.slot}</label>
+                <div class="featured-game-name">${esc(title)}</div>
               </div>
               <button class="featured-game-action ${isCurrent ? 'primary' : ''}" data-featured-slot="${game.slot}">
                 Anzeigen
@@ -969,19 +1536,6 @@
             </div>`;
         })
         .join('');
-
-    featuredGamesEl.querySelectorAll('[data-featured-title]').forEach((input) => {
-      input.onchange = () =>
-        App.socket.emit('admin:set-featured-title', {
-          slot: Number(input.dataset.featuredTitle),
-          title: input.value,
-        });
-      input.onkeydown = (event) => {
-        if (event.key === 'Enter') {
-          input.blur();
-        }
-      };
-    });
 
     featuredGamesEl.querySelectorAll('[data-featured-slot]').forEach((btn) => {
       btn.disabled = introRunning;
@@ -1025,6 +1579,7 @@
   App.onState((state) => {
     renderAblauf(state);
     renderBuzzer(state);
+    renderAmbientMusic(state);
     renderPlayers(state);
     renderFeaturedGames(state);
     renderGames(state);

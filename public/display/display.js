@@ -6,6 +6,11 @@
   const contentEl = document.getElementById('content');
   const winnerEl = document.getElementById('winner');
   const joinQrEl = document.getElementById('join-qr');
+  const soundUnlockEl = document.getElementById('sound-unlock');
+  const ambientPanelEl = document.getElementById('ambient-panel');
+  const ambientPlayerEl = document.getElementById('ambient-player');
+  const ambientStartEl = document.getElementById('ambient-start');
+  const ambientTitleEl = document.getElementById('ambient-title');
 
   document.getElementById('qr-play').src =
     '/qr?data=' + encodeURIComponent(location.origin + '/play/');
@@ -18,12 +23,29 @@
     sendAction: (a) => App.socket.emit('game:action', a),
   };
   const host = window.createGameHost(contentEl, ctx);
+  let audioCtx = null;
+  let activeAnimationSoundKey = null;
+  let animationSoundTimers = [];
+  let ambientAudio = null;
+  let ambientDesired = { enabled: false, trackId: 'pick-your-poison', volume: 32 };
+  let ambientCurrentTrackId = null;
+  let ambientBlocked = false;
+  let crashMusicAudio = null;
+  let crashExplosionAudio = null;
+  let lastCrashPhase = null;
+  const AMBIENT_TRACKS = [
+    { id: 'pick-your-poison', label: 'Pick Your Poison', src: '/assets/audio/pick-your-poison.mp3' },
+    { id: 'hide', label: 'Hide', src: '/assets/audio/hide.mp3' },
+    { id: 'blind-spot', label: 'Blind Spot', src: '/assets/audio/blind-spot.mp3' },
+    { id: 'poker-ambiente', label: 'Poker Ambiente (Finale)', src: '/assets/audio/poker-ambiente.mp3' },
+  ];
+  initDisplaySoundControls();
+  initAmbientMusicControls();
   const ROULETTE_OPTION_LABELS = [
     'Ballon transportieren',
     'Blinder Eierlauf',
     'Bottleflip',
-    'Cornhole',
-    'Dart Ringe',
+    'Dartringe',
     'How much is the fish',
     'Emoji Filmquiz',
     '2016?',
@@ -33,7 +55,7 @@
     'Shazam',
     'Papierflieger',
     'Partner Zielwurf',
-    'Halbe Sache',
+    'Halbe Sachen',
     'Video (Hanni vs. Richi)',
     'Wer bin ich',
     'Wo liegt was',
@@ -43,7 +65,7 @@
     'Ballon transportieren': 'Ballon',
     'Blinder Eierlauf': 'Eierlauf',
     Bottleflip: 'Bottle',
-    'Dart Ringe': 'Dart',
+    Dartringe: 'Dart',
     'How much is the fish': 'Fish',
     'Emoji Filmquiz': 'Emoji',
     'Ferngesteuerte Scharade': 'Scharade',
@@ -51,7 +73,7 @@
     Labyrinth: 'Labyr.',
     Papierflieger: 'Flieger',
     'Partner Zielwurf': 'Zielwurf',
-    'Halbe Sache': 'Halbe',
+    'Halbe Sachen': 'Halbe',
     'Video (Hanni vs. Richi)': 'Video',
     'Wer bin ich': 'Wer bin?',
     'Wo liegt was': 'Wo?',
@@ -348,7 +370,9 @@
     } else if (state.phase === 'auswertung') {
       contentEl.innerHTML = payoutStage(state);
     } else if (state.phase === 'finale') {
-      contentEl.innerHTML = finale(state);
+      contentEl.innerHTML = tableScene(state, {
+        centerHtml: '<div class="table-kicker">Finale</div><div class="table-main">POKERRUNDE</div>',
+      });
     } else {
       contentEl.innerHTML = tableScene(state, {
         eyebrow: 'WEIDMANN WM Poker Edition',
@@ -363,7 +387,10 @@
     return `
       <div class="table-scene">
         <div class="table-title">
-          <div class="table-brand">♠ ${escapeHtml(copy.eyebrow)} ♠</div>
+          <div class="table-brand">
+            <span>WEIDMANN WM</span>
+            <small>Poker Edition</small>
+          </div>
         </div>
         <div class="poker-table">
           ${centerHtml ? `<div class="table-center${centerClass}">${centerHtml}</div>` : ''}
@@ -621,7 +648,7 @@
 
   function cornholeCardsReveal(game, choices, spinning, duration, slotNumber, preview = false) {
     if (!game) return idle('Spielauswahl', 'Kein Spiel vorbereitet.');
-    const title = game.title || game.name || 'Cornhole';
+    const title = game.title || game.name || 'Nächstes Spiel';
     const resolvedDuration = Math.max(1200, Number(duration) || 4300);
     const state = preview ? 'idle' : spinning ? 'dealing' : 'complete';
     const subtitle = preview ? 'Bereit' : slotNumber ? `Spiel ${slotNumber}` : 'Nächstes Spiel';
@@ -1298,18 +1325,6 @@
     return idle('Auswertung', 'Admin trägt die Platzierungen ein.');
   }
 
-  function finale(state) {
-    const ranked = [...state.players].sort((a, b) => b.score - a.score);
-    const rows = ranked
-      .map((p, i) => `
-        <div class="choice-card">
-          <div class="cn" style="color:${p.color}">${i + 1}. ${escapeHtml(p.name)}</div>
-          <div class="cm">${p.score} Coins</div>
-        </div>`)
-      .join('');
-    return `<div class="choices-wrap"><div class="choices-title">Finale Wertung</div><div class="choices">${rows}</div></div>`;
-  }
-
   function idle(big, sub) {
     return `<div class="idle"><div class="big">${big}</div><div>${sub || ''}</div></div>`;
   }
@@ -1372,6 +1387,9 @@
         state.phase === 'wetten'
     );
     document.body.classList.toggle('crash-mode', crashActive);
+    syncAmbientMusic(state);
+    syncAnimationSound(state, crashActive);
+    syncCrashSound(state, crashActive);
 
     if (crashActive) {
       host.sync({ ...state, activeGame: null });
@@ -1389,34 +1407,533 @@
     }
   });
 
-  App.socket.on('fx:buzzer-armed', () => beep(660, 0.12));
+  App.socket.on('fx:buzzer-armed', () => playBuzzerArmedSound());
 
   App.socket.on('fx:buzzer-winner', (w) => {
     winnerEl.querySelector('.wname').textContent = w.playerName || w.teamName || '';
     winnerEl.querySelector('.wname').style.color = w.color || '#fff';
     winnerEl.classList.add('show');
-    beep(880, 0.18);
-    setTimeout(() => beep(1175, 0.22), 130);
+    playBuzzerWinnerSound();
     setTimeout(() => winnerEl.classList.remove('show'), 3500);
   });
 
-  let audioCtx = null;
-  function beep(freq, dur) {
-    try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.frequency.value = freq;
-      o.type = 'square';
-      o.connect(g);
-      g.connect(audioCtx.destination);
-      g.gain.setValueAtTime(0.18, audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
-      o.start();
-      o.stop(audioCtx.currentTime + dur);
-    } catch (e) {
-      /* Audio evtl. erst nach User-Geste erlaubt */
+  // Game-Show-Sound: Buzzer sind scharf - aufsteigender Sweep plus heller Ding.
+  function playBuzzerArmedSound() {
+    playSweep(392, 784, 0.22, 0, 'triangle', 0.09);
+    playTone(1175, 0.14, 200, 'triangle', 0.1);
+    playTone(1568, 0.2, 300, 'sine', 0.08);
+  }
+
+  // Erster Buzz: Buzzer-Sound als MP3.
+  let buzzerWinnerAudio = null;
+  function playBuzzerWinnerSound() {
+    if (!buzzerWinnerAudio) {
+      buzzerWinnerAudio = new Audio('/assets/audio/buzzer.mp3');
+      buzzerWinnerAudio.preload = 'auto';
     }
+    buzzerWinnerAudio.currentTime = 0;
+    buzzerWinnerAudio.play().catch(() => {});
+  }
+
+  function initAmbientMusicControls() {
+    if (ambientStartEl) {
+      ambientStartEl.onclick = () => {
+        ambientBlocked = false;
+        applyAmbientMusic(true);
+      };
+    }
+  }
+
+  function syncAmbientMusic(state) {
+    ambientDesired = normalizeAmbientMusic(state && state.ambientMusic);
+    updateAmbientPanel();
+
+    if (!ambientDesired.enabled) {
+      if (ambientAudio) {
+        ambientAudio.pause();
+      }
+      ambientCurrentTrackId = null;
+      ambientBlocked = false;
+      updateAmbientPanel();
+      return;
+    }
+
+    ensureAmbientPlayer();
+    applyAmbientMusic(false);
+  }
+
+  function normalizeAmbientMusic(raw) {
+    const value = raw && typeof raw === 'object' ? raw : {};
+    const trackId = AMBIENT_TRACKS.some((track) => track.id === value.trackId)
+      ? value.trackId
+      : AMBIENT_TRACKS[0].id;
+    const volume = Math.max(0, Math.min(100, Math.round(Number(value.volume == null ? 32 : value.volume) || 0)));
+    return {
+      enabled: value.enabled === true,
+      trackId,
+      volume,
+    };
+  }
+
+  function ensureAmbientPlayer() {
+    if (ambientAudio || !ambientPlayerEl) return;
+
+    ambientAudio = document.createElement('audio');
+    ambientAudio.controls = true;
+    ambientAudio.loop = true;
+    ambientAudio.preload = 'auto';
+    ambientAudio.playsInline = true;
+    ambientAudio.addEventListener('playing', () => {
+      ambientBlocked = false;
+      updateAmbientPanel();
+    });
+    ambientAudio.addEventListener('pause', () => {
+      if (ambientDesired.enabled) {
+        ambientBlocked = true;
+        updateAmbientPanel();
+      }
+    });
+    ambientAudio.addEventListener('error', () => {
+      ambientBlocked = true;
+      updateAmbientPanel();
+    });
+
+    ambientPlayerEl.innerHTML = '';
+    ambientPlayerEl.appendChild(ambientAudio);
+  }
+
+  function applyAmbientMusic(fromUserGesture) {
+    if (!ambientDesired.enabled) return;
+    if (!ambientAudio) {
+      ensureAmbientPlayer();
+      updateAmbientPanel();
+      return;
+    }
+
+    const track = AMBIENT_TRACKS.find((entry) => entry.id === ambientDesired.trackId) || AMBIENT_TRACKS[0];
+    try {
+      ambientAudio.volume = ambientDesired.volume / 100;
+
+      if (ambientCurrentTrackId !== ambientDesired.trackId) {
+        ambientCurrentTrackId = ambientDesired.trackId;
+        ambientAudio.src = track.src;
+        ambientAudio.load();
+      }
+
+      const playPromise = ambientAudio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise
+          .then(() => {
+            ambientBlocked = false;
+            updateAmbientPanel();
+          })
+          .catch(() => {
+            ambientBlocked = true;
+            updateAmbientPanel();
+          });
+      }
+
+      window.setTimeout(() => {
+        ambientBlocked = ambientDesired.enabled && ambientAudio.paused;
+        if (fromUserGesture && ambientBlocked) {
+          const retry = ambientAudio.play();
+          if (retry && typeof retry.catch === 'function') {
+            retry.catch(() => {
+              ambientBlocked = true;
+              updateAmbientPanel();
+            });
+          }
+        }
+        updateAmbientPanel();
+      }, 700);
+    } catch (e) {
+      ambientBlocked = true;
+      updateAmbientPanel();
+    }
+  }
+
+  function updateAmbientPanel() {
+    if (!ambientPanelEl) return;
+    const track = AMBIENT_TRACKS.find((entry) => entry.id === ambientDesired.trackId) || AMBIENT_TRACKS[0];
+    if (ambientTitleEl) ambientTitleEl.textContent = track.label;
+    const active = ambientDesired.enabled;
+    ambientPanelEl.classList.toggle('active', active);
+    ambientPanelEl.classList.toggle('needs-start', active && ambientBlocked);
+  }
+
+  function initDisplaySoundControls() {
+    refreshSoundUnlockButton();
+    if (soundUnlockEl) {
+      soundUnlockEl.onclick = () => unlockAudio(true);
+    }
+    window.addEventListener('pointerdown', () => unlockAudio(false), { once: true });
+    window.addEventListener('keydown', () => unlockAudio(false), { once: true });
+  }
+
+  function syncCrashSound(state, crashActive) {
+    const phase = crashActive && state.crashGame ? state.crashGame.phase : null;
+    if (phase === lastCrashPhase) return;
+    const previousPhase = lastCrashPhase;
+    lastCrashPhase = phase;
+
+    if (phase === 'running') {
+      stopCrashExplosion();
+      startCrashMusic();
+      return;
+    }
+
+    stopCrashMusic();
+    if (phase === 'crashed' && previousPhase === 'running') {
+      playCrashExplosion();
+    } else if (phase !== 'crashed') {
+      stopCrashExplosion();
+    }
+  }
+
+  function startCrashMusic() {
+    if (!crashMusicAudio) {
+      crashMusicAudio = new Audio('/assets/audio/crash-background.mp3');
+      crashMusicAudio.loop = true;
+      crashMusicAudio.preload = 'auto';
+    }
+    crashMusicAudio.currentTime = 0;
+    crashMusicAudio.play().catch(() => {});
+  }
+
+  function stopCrashMusic() {
+    if (crashMusicAudio && !crashMusicAudio.paused) {
+      crashMusicAudio.pause();
+    }
+  }
+
+  function playCrashExplosion() {
+    if (!crashExplosionAudio) {
+      crashExplosionAudio = new Audio('/assets/audio/crash-explosion.mp3');
+      crashExplosionAudio.preload = 'auto';
+    }
+    crashExplosionAudio.currentTime = 0;
+    crashExplosionAudio.play().catch(() => {});
+  }
+
+  function stopCrashExplosion() {
+    if (crashExplosionAudio && !crashExplosionAudio.paused) {
+      crashExplosionAudio.pause();
+    }
+  }
+
+  function syncAnimationSound(state, crashActive) {
+    const sound = animationSoundFromState(state, crashActive);
+    if (!sound) {
+      if (activeAnimationSoundKey) {
+        clearAnimationSoundTimers();
+        activeAnimationSoundKey = null;
+      }
+      return;
+    }
+    if (sound.key === activeAnimationSoundKey) return;
+
+    clearAnimationSoundTimers();
+    activeAnimationSoundKey = sound.key;
+    playAnimationSound(sound.animation, sound.durationMs);
+  }
+
+  function animationSoundFromState(state, crashActive) {
+    if (!state || crashActive) return null;
+    if (state.ambientMusic && state.ambientMusic.enabled === true) return null;
+    const round = state.round || {};
+    const intro = round.intro || {};
+
+    if (state.phase === 'spiel-intro' && intro.status === 'running') {
+      return {
+        key: [
+          'intro',
+          round.number || 0,
+          intro.startedAt || 0,
+          intro.animation || 'reveal',
+          intro.targetGameId || round.gameId || '',
+        ].join(':'),
+        animation: isScratchIntro(round) ? 'scratch' : intro.animation || 'reveal',
+        durationMs: intro.durationMs || 4600,
+      };
+    }
+
+    if (state.phase === 'spin-laeuft' && round.spin && round.spin.status === 'spinning') {
+      return {
+        key: ['spin', round.spin.startedAt || 0, round.spin.winnerGameId || ''].join(':'),
+        animation: 'roulette',
+        durationMs: round.spin.durationMs || 4600,
+      };
+    }
+
+    return null;
+  }
+
+  function playAnimationSound(animation, durationMs) {
+    unlockAudio(false);
+    const duration = Math.max(900, Number(durationMs) || 4600);
+    const type = animation || 'reveal';
+
+    if (type === 'slot') {
+      playSlotSound(duration);
+    } else if (type === 'roulette') {
+      playRouletteSound(duration);
+    } else if (type === 'cards') {
+      playCardsSound(duration);
+    } else if (type === 'wheel') {
+      playWheelSound(duration);
+    } else if (type === 'scratch') {
+      playScratchSound(duration);
+    } else {
+      playRevealSound(duration);
+    }
+  }
+
+  function playSlotSound(duration) {
+    playThunk(0, 0.9);
+    playSweep(110, 55, 0.38, 120, 'sawtooth', 0.07);
+    timedTicks(180, Math.max(700, duration - 1050), 82, (delay, index) => {
+      playTone(520 + (index % 5) * 90, 0.032, delay, 'square', 0.045);
+    });
+    [duration - 730, duration - 500, duration - 280].forEach((delay, index) => {
+      scheduleSound(() => {
+        playThunk(0, 0.68);
+        playTone(760 + index * 140, 0.09, 40, 'triangle', 0.09);
+      }, Math.max(120, delay));
+    });
+    playFanfare(Math.max(250, duration - 120));
+  }
+
+  function playRouletteSound(duration) {
+    playNoise(0.35, 0, 0.09, 'bandpass', 1200, 0.7);
+    playSweep(180, 520, Math.min(2.1, duration / 1000 * 0.55), 0, 'sawtooth', 0.055);
+    timedTicks(120, Math.max(600, duration - 900), 72, (delay, index) => {
+      const slow = delay / Math.max(1, duration);
+      const step = 42 + slow * 95;
+      if (index % Math.max(1, Math.round(step / 42)) === 0) {
+        playTone(1250 + (index % 4) * 90, 0.024, delay, 'square', 0.042);
+      }
+    });
+    timedTicks(240, Math.max(500, duration - 850), 260, (delay) => {
+      playNoise(0.12, delay, 0.035, 'bandpass', 740, 0.9);
+    });
+    playTone(1760, 0.08, Math.max(180, duration - 360), 'triangle', 0.09);
+    playFanfare(Math.max(260, duration - 140));
+  }
+
+  function playCardsSound(duration) {
+    playNoise(0.28, 0, 0.08, 'highpass', 2200, 0.55);
+    [340, 720].forEach((delay, index) => {
+      playNoise(0.12, delay, 0.11, 'bandpass', 1850 + index * 320, 1.1);
+      playTone(260 + index * 70, 0.08, delay + 28, 'triangle', 0.05);
+    });
+    [duration * 0.52, duration * 0.62].forEach((delay, index) => {
+      playTone(740 + index * 210, 0.09, delay, 'square', 0.055);
+      playNoise(0.08, delay + 18, 0.055, 'highpass', 2600, 0.8);
+    });
+    playFanfare(Math.max(380, duration - 420));
+  }
+
+  function playWheelSound(duration) {
+    playSweep(95, 410, Math.max(0.8, duration / 1000 - 0.45), 0, 'sawtooth', 0.055);
+    timedTicks(170, Math.max(600, duration - 780), 112, (delay, index) => {
+      playTone(420 + (index % 3) * 110, 0.026, delay, 'square', 0.045);
+    });
+    playNoise(0.24, Math.max(200, duration - 520), 0.11, 'lowpass', 420, 0.8);
+    playTone(130, 0.18, Math.max(250, duration - 500), 'triangle', 0.09);
+    playFanfare(Math.max(340, duration - 170));
+  }
+
+  function playScratchSound(duration) {
+    playTone(660, 0.08, 0, 'triangle', 0.055);
+    timedTicks(520, Math.max(700, duration - 1250), 155, (delay, index) => {
+      const freq = 1900 + (index % 5) * 260;
+      playNoise(0.11, delay, 0.105, 'bandpass', freq, 1.6);
+    });
+    playNoise(0.3, Math.max(260, duration - 980), 0.08, 'highpass', 2600, 0.8);
+    playFanfare(Math.max(360, duration - 360));
+  }
+
+  function playRevealSound(duration) {
+    timedTicks(120, Math.max(300, duration - 850), 150, (delay, index) => {
+      playTone(520 + index * 28, 0.04, delay, 'triangle', 0.035);
+    });
+    playFanfare(Math.max(260, duration - 220));
+  }
+
+  function playFanfare(delayMs) {
+    const delay = Math.max(0, delayMs);
+    playTone(880, 0.12, delay, 'triangle', 0.08);
+    playTone(1175, 0.13, delay + 120, 'triangle', 0.08);
+    playTone(1568, 0.22, delay + 245, 'triangle', 0.09);
+    playTone(523, 0.26, delay + 250, 'sine', 0.045);
+  }
+
+  function timedTicks(startMs, durationMs, intervalMs, fn) {
+    const end = startMs + Math.max(0, durationMs);
+    let index = 0;
+    for (let delay = startMs; delay <= end; delay += intervalMs) {
+      fn(delay, index);
+      index += 1;
+    }
+  }
+
+  function clearAnimationSoundTimers() {
+    animationSoundTimers.forEach((timer) => clearTimeout(timer));
+    animationSoundTimers = [];
+  }
+
+  function scheduleSound(fn, delayMs = 0) {
+    const delay = Math.max(0, Number(delayMs) || 0);
+    if (!delay) {
+      fn();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      animationSoundTimers = animationSoundTimers.filter((entry) => entry !== timer);
+      fn();
+    }, delay);
+    animationSoundTimers.push(timer);
+  }
+
+  function beep(freq, dur) {
+    playTone(freq, dur, 0, 'square', 0.18);
+  }
+
+  function playThunk(delayMs = 0, strength = 1) {
+    playNoise(0.1, delayMs, 0.1 * strength, 'lowpass', 260, 0.8);
+    playTone(82, 0.13, delayMs, 'sine', 0.08 * strength);
+  }
+
+  function playTone(freq, durationSec, delayMs = 0, type = 'sine', gainValue = 0.08) {
+    scheduleSound(() => {
+      const ctx = getRunningAudioContext();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      const duration = Math.max(0.02, Number(durationSec) || 0.08);
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(Math.max(20, Number(freq) || 440), now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, gainValue), now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + duration + 0.03);
+    }, delayMs);
+  }
+
+  function playSweep(startFreq, endFreq, durationSec, delayMs = 0, type = 'sine', gainValue = 0.055) {
+    scheduleSound(() => {
+      const ctx = getRunningAudioContext();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      const duration = Math.max(0.08, Number(durationSec) || 0.4);
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(Math.max(20, startFreq), now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), now + duration);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(gainValue, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + duration + 0.05);
+    }, delayMs);
+  }
+
+  function playNoise(durationSec, delayMs = 0, gainValue = 0.08, filterType = 'bandpass', frequency = 1200, q = 1) {
+    scheduleSound(() => {
+      const ctx = getRunningAudioContext();
+      if (!ctx) return;
+      const duration = Math.max(0.03, Number(durationSec) || 0.08);
+      const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i += 1) {
+        const fade = 1 - i / length;
+        data[i] = (Math.random() * 2 - 1) * fade;
+      }
+
+      const source = ctx.createBufferSource();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+
+      source.buffer = buffer;
+      filter.type = filterType;
+      filter.frequency.setValueAtTime(Math.max(40, frequency), now);
+      filter.Q.setValueAtTime(Math.max(0.1, q), now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(gainValue, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      source.start(now);
+      source.stop(now + duration + 0.02);
+    }, delayMs);
+  }
+
+  function getAudioContext() {
+    if (audioCtx) return audioCtx;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return null;
+    try {
+      audioCtx = new AudioContextCtor();
+      audioCtx.onstatechange = refreshSoundUnlockButton;
+      refreshSoundUnlockButton();
+      return audioCtx;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getRunningAudioContext() {
+    const ctx = getAudioContext();
+    if (!ctx || ctx.state !== 'running') {
+      refreshSoundUnlockButton();
+      return null;
+    }
+    return ctx;
+  }
+
+  function unlockAudio(playTestSound) {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const done = () => {
+      refreshSoundUnlockButton();
+      if (playTestSound && ctx.state === 'running') {
+        playTone(880, 0.08, 0, 'triangle', 0.07);
+        playTone(1320, 0.11, 95, 'triangle', 0.07);
+      }
+    };
+
+    try {
+      const resume = ctx.state === 'suspended' ? ctx.resume() : null;
+      if (resume && typeof resume.then === 'function') {
+        resume.then(done).catch(refreshSoundUnlockButton);
+      } else {
+        done();
+      }
+    } catch (e) {
+      refreshSoundUnlockButton();
+    }
+  }
+
+  function refreshSoundUnlockButton() {
+    if (!soundUnlockEl) return;
+    const supported = !!(window.AudioContext || window.webkitAudioContext);
+    soundUnlockEl.hidden = !supported;
+    if (!supported) return;
+    const ready = audioCtx && audioCtx.state === 'running';
+    soundUnlockEl.classList.toggle('ready', ready);
+    soundUnlockEl.textContent = ready ? 'Sound an' : 'Sound aktivieren';
   }
 
   function detailRow(label, value) {

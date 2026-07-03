@@ -36,7 +36,6 @@
       <button class="player-btn ${myPlayer === p.id ? 'active' : ''}"
               style="--pc:${p.color}" data-player="${p.id}">
         ${escapeHtml(p.name)}
-        <span>${p.score} Coins</span>
       </button>`)
       .join('');
     playerGrid.querySelectorAll('[data-player]').forEach((btn) => {
@@ -108,12 +107,12 @@
     }
 
     if (state.phase === 'auswertung') {
-      pickArea.innerHTML = waiting('Auswertung', 'Coins werden ausgezahlt ...');
+      pickArea.innerHTML = waiting('Auswertung', 'Admin wertet die Runde aus ...');
       return;
     }
 
     if (state.phase === 'finale') {
-      pickArea.innerHTML = waiting('Finale', 'Die Show ist durch.');
+      pickArea.innerHTML = waiting('Finale Pokerrunde', 'Keine Handy-Aktion nötig.');
       return;
     }
 
@@ -285,7 +284,7 @@
     const myPlayerId = me && me.playerId;
     const player = myPlayerId && state.players.find((p) => p.id === myPlayerId);
 
-    whoEl.textContent = player ? `${player.name} - ${player.score} Coins` : 'Spieler wählen';
+    whoEl.textContent = player ? player.name : 'Spieler wählen';
     whoEl.style.color = player ? player.color : '';
 
     renderPlayers(state);

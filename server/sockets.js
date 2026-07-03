@@ -55,15 +55,14 @@ function attachSockets(io, gameState, registry) {
 
   function visibleAdminGames() {
     const featured = gameState.featuredGames();
-    const allowedGameIds = new Set(featured.map((entry) => entry.gameId));
-
-    // WO LIEGT WAS? ist ein Test-/Sondermodul und soll in der Admin-Direktstartliste
-    // weiterhin erreichbar bleiben, auch wenn es kein fester Animationsslot ist.
-    allowedGameIds.add('wo-liegt-was');
-    allowedGameIds.add('das-prozent-quiz');
-
     const allGames = registry.list();
-    const visible = allGames.filter((game) => allowedGameIds.has(game.id));
+    const byId = new Map(allGames.map((game) => [game.id, game]));
+    const visible = featured
+      .map((entry) => {
+        const game = byId.get(entry.gameId);
+        return game ? { ...game, name: entry.title, title: entry.title } : null;
+      })
+      .filter(Boolean);
     return visible.length ? visible : allGames;
   }
 
@@ -178,7 +177,16 @@ function attachSockets(io, gameState, registry) {
     socket.on('admin:game-points', (payload = {}) =>
       gameState.addGamePoints(payloadPlayerId(payload), payload.delta));
 
+    socket.on('admin:set-game-points', (payload = {}) =>
+      gameState.setGamePoints(payloadPlayerId(payload), payload.value));
+
     socket.on('admin:reset-game-points', () => gameState.resetGameScores());
+
+    socket.on('admin:ambient-music', (patch = {}) => {
+      if (socket.data.role !== 'admin') return;
+      gameState.setAmbientMusic(patch);
+    });
+
     socket.on('admin:set-placement', ({ playerId, place } = {}) =>
       gameState.setPlacement(playerId, place));
     socket.on('admin:clear-placement', ({ playerId } = {}) =>
@@ -207,6 +215,11 @@ function attachSockets(io, gameState, registry) {
     socket.on('admin:crash-set-stake', ({ playerId, amount } = {}) => {
       if (socket.data.role !== 'admin') return;
       gameState.setCrashStake(playerId, amount);
+    });
+
+    socket.on('admin:crash-set-settings', (settings = {}) => {
+      if (socket.data.role !== 'admin') return;
+      gameState.setCrashSettings(settings);
     });
 
     socket.on('admin:crash-start', () => {

@@ -17,7 +17,7 @@ module.exports = {
   rules: 'Die genaue Regelversion wird beim Ausbau des Spiels festgelegt.',
   materials: ['Cornhole-Board', 'Wurfsäckchen'],
   hasBeenPlayed: false,
-  selectable: true,
+  selectable: false,
   interaktionstyp: 'keine', // TBD beim Bauen
   built: false,
 };

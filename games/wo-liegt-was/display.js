@@ -3,6 +3,9 @@
   let lastState = null;
   let mapReady = false;
   let countdownTimer = null;
+  let tickingAudio = null;
+  let tickingEndsAt = null;
+  let tickingStartTimer = null;
 
   GameRegistry.register('wo-liegt-was', {
     mount(container) {
@@ -17,6 +20,8 @@
 
     update(state) {
       lastState = state;
+      const game = normalizeGameState(state.gameState);
+      syncTickingSound(game);
       if (!mapReady) return;
       render(document.getElementById('content'), state);
     },
@@ -24,6 +29,7 @@
     unmount(container) {
       if (window.__setGameMounted) window.__setGameMounted(false);
       clearCountdownTimer();
+      stopTickingSound();
       container.innerHTML = '';
       lastState = null;
     },
@@ -180,6 +186,68 @@
       clearInterval(countdownTimer);
       countdownTimer = null;
     }
+  }
+
+  // Ticking-Sound synchron zum Setz-Timer: Das Ende der Audiodatei fällt
+  // exakt auf placingEndsAt. Bei spätem Einstieg wird in die Datei gespult,
+  // bei laufender Wiedergabe wird Drift > 0,4 s korrigiert.
+  function syncTickingSound(game) {
+    const endsAt = Number(game.placingEndsAt || 0);
+    if (game.phase !== 'placing' || !endsAt || endsAt - Date.now() <= 250) {
+      stopTickingSound();
+      return;
+    }
+    tickingEndsAt = endsAt;
+    ensureTickingAudio();
+    alignTicking();
+  }
+
+  function ensureTickingAudio() {
+    if (tickingAudio) return;
+    tickingAudio = new Audio('/assets/audio/wo-liegt-was-ticking.mp3');
+    tickingAudio.preload = 'auto';
+    tickingAudio.addEventListener('loadedmetadata', alignTicking);
+  }
+
+  function alignTicking() {
+    if (!tickingAudio || !tickingEndsAt) return;
+    const remainingSec = (tickingEndsAt - Date.now()) / 1000;
+    if (remainingSec <= 0.05) {
+      stopTickingSound();
+      return;
+    }
+    const duration = tickingAudio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return; // wartet auf loadedmetadata
+
+    if (tickingStartTimer) {
+      clearTimeout(tickingStartTimer);
+      tickingStartTimer = null;
+    }
+
+    if (duration >= remainingSec) {
+      const offset = duration - remainingSec;
+      if (tickingAudio.paused || Math.abs(tickingAudio.currentTime - offset) > 0.4) {
+        tickingAudio.currentTime = offset;
+      }
+      if (tickingAudio.paused) tickingAudio.play().catch(() => {});
+    } else {
+      // Datei kürzer als Restzeit: Start so timen, dass das Ende zusammenfällt.
+      if (!tickingAudio.paused) tickingAudio.pause();
+      tickingAudio.currentTime = 0;
+      tickingStartTimer = setTimeout(() => {
+        tickingStartTimer = null;
+        alignTicking();
+      }, Math.max(0, (remainingSec - duration) * 1000));
+    }
+  }
+
+  function stopTickingSound() {
+    tickingEndsAt = null;
+    if (tickingStartTimer) {
+      clearTimeout(tickingStartTimer);
+      tickingStartTimer = null;
+    }
+    if (tickingAudio && !tickingAudio.paused) tickingAudio.pause();
   }
 
   function formatTimerMs(ms) {

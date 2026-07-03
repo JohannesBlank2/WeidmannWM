@@ -3,13 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Weidmann WM — Admin</title>
+  <title>WEIDMANN WM Poker Edition - Admin</title>
   <link rel="stylesheet" href="/shared/style.css" />
   <style>
-    body { padding: 14px; max-width: 760px; margin: 0 auto; overflow-y: auto; height: 100vh; }
+    body { padding: 14px; max-width: 1180px; margin: 0 auto; overflow-y: auto; min-height: 100vh; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     section.card { margin-bottom: 14px; }
     h2 { font-size: 1.1rem; }
+    .admin-layout { display: grid; gap: 14px; align-items: start; }
+    .admin-main, .admin-side { min-width: 0; }
 
     /* Ablauf */
     .round-banner { font-size: 1.05rem; margin-bottom: 10px; }
@@ -34,6 +36,29 @@
     .ptbox .sc { font-weight: 800; font-size: 1.2rem; min-width: 2.2ch; text-align: center; }
     .ptbox.game .sc { color: var(--accent); }
     .ptbox button { padding: 8px 12px; min-width: 40px; }
+    .score-input {
+      width: 58px; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 8px; padding: 8px 6px; font: inherit;
+      font-size: 1.1rem; font-weight: 900; text-align: center;
+    }
+    .ptbox.game .score-input { color: var(--accent); }
+
+    .ambient-admin-status {
+      display: grid; gap: 4px; margin-bottom: 10px;
+      color: var(--muted); font-weight: 800;
+    }
+    .ambient-admin-status b { color: var(--accent); font-size: 1.05rem; }
+    .ambient-track-list { display: grid; gap: 7px; margin-top: 10px; }
+    .ambient-track-list button {
+      display: grid; gap: 3px; text-align: left; padding: 10px 12px;
+    }
+    .ambient-track-list span { color: var(--muted); font-size: .82rem; font-weight: 800; }
+    .ambient-track-list button.primary span { color: rgba(36,17,4,.72); }
+    .ambient-volume {
+      display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 10px; align-items: center;
+      margin-top: 12px; color: var(--muted); font-weight: 900;
+    }
+    .ambient-volume input { width: 100%; accent-color: var(--accent); }
 
     .client-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
       background: var(--panel); border: 1px solid var(--line); margin: 3px; }
@@ -58,11 +83,11 @@
       color: var(--muted); font-size: .78rem; font-weight: 800; text-transform: uppercase;
       letter-spacing: .04em;
     }
-    .featured-game-title input {
+    .featured-game-name {
       width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
       color: var(--text); border-radius: 8px; padding: 9px 10px; font: inherit; font-weight: 800;
     }
-    .featured-game-row.current .featured-game-title input { border-color: var(--accent); }
+    .featured-game-row.current .featured-game-name { border-color: var(--accent); }
     .featured-game-action {
       min-width: 118px; font-weight: 800;
     }
@@ -111,77 +136,152 @@
     .percent-selected-admin {
       margin-top: 10px; border-color: rgba(255,209,92,.32);
     }
+    .halbe-admin-winner {
+      border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.26) inset;
+    }
+    .halbe-weight-field {
+      flex: 1 1 120px; display: grid; gap: 4px;
+      color: var(--muted); font-size: .78rem; font-weight: 900;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .halbe-weight-field input {
+      width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 8px; padding: 10px 12px; font: inherit;
+      font-size: 1rem; font-weight: 900;
+    }
+    .halbe-admin-winner .halbe-weight-field input {
+      border-color: rgba(255,209,92,.52);
+    }
+    .dart-ringe-admin-finale {
+      border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.26) inset;
+    }
+    .fish-item-admin {
+      display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px;
+      align-items: end;
+    }
+    .fish-item-admin label {
+      display: grid; gap: 4px; color: var(--muted);
+      font-size: .78rem; font-weight: 900; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .fish-item-admin input {
+      width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 8px; padding: 9px 10px; font: inherit; font-weight: 800;
+    }
+    .fish-admin-winner {
+      border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.26) inset;
+    }
+    .fish-total-admin-list {
+      display: grid; gap: 7px; margin: 8px 0;
+    }
+    .fish-total-admin-row {
+      display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px; align-items: center;
+      color: var(--muted); font-weight: 900;
+    }
+    .fish-total-admin-row span {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .fish-total-admin-row input {
+      width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+      color: var(--accent); border-radius: 8px; padding: 8px 10px; font: inherit;
+      font-weight: 900; text-align: right;
+    }
+    @media (min-width: 900px) {
+      body { padding: 16px 20px; }
+      .admin-layout { grid-template-columns: minmax(0, 1.18fr) minmax(340px, .82fr); }
+    }
+    @media (max-width: 560px) {
+      .fish-item-admin { grid-template-columns: 1fr; }
+      .fish-total-admin-row { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div class="row" style="justify-content:space-between; margin-bottom:10px;">
-    <h1 style="margin:0; font-size:1.4rem;">🎛️ Admin</h1>
+    <h1 style="margin:0; font-size:1.4rem;">Admin</h1>
     <div class="row">
       <span class="phase-pill" id="phase-pill">lobby</span>
       <span class="conn-badge offline" data-conn>getrennt</span>
     </div>
   </div>
 
-  <!-- Ablauf / Runden -->
-  <section class="card">
-    <h2>Ablauf</h2>
-    <div class="round-banner" id="round-banner"></div>
-    <div class="flow row">
-      <button data-flow="show-lobby">🎲 Tisch anzeigen</button>
-      <button class="bad" data-flow="stop-game">⏹ Spiel beenden → Auswertung</button>
-      <button data-flow="goto-finale">→ Finale</button>
-    </div>
-    <div class="featured-games" id="featured-games"></div>
-    <div class="pickrow" id="picker-area"></div>
-  </section>
+  <div class="admin-layout">
+    <main class="admin-main">
+      <!-- Ablauf / Runden -->
+      <section class="card">
+        <h2>Ablauf</h2>
+        <div class="round-banner" id="round-banner"></div>
+        <div class="flow row">
+          <button data-flow="show-lobby">Tisch anzeigen</button>
+          <button class="bad" data-flow="stop-game">Spiel beenden → Auswertung</button>
+          <button data-flow="goto-finale">→ Finale</button>
+        </div>
+        <div class="featured-games" id="featured-games"></div>
+        <div class="pickrow" id="picker-area"></div>
+      </section>
 
-  <!-- Mini-Casino Crash -->
-  <section class="card">
-    <h2>Mini-Casino · Crash</h2>
-    <div id="crash-admin"></div>
-  </section>
+      <!-- Spiele (Direktstart / Test) -->
+      <section class="card">
+        <h2>Spiele <span class="muted" style="font-size:.8rem">(Direktstart)</span></h2>
+        <div id="active-game" class="muted" style="margin-bottom:8px;"></div>
+        <div id="games"></div>
+      </section>
+    </main>
 
-  <!-- Buzzer -->
-  <section class="card">
-    <h2>Buzzer <span class="muted" id="buzz-state" style="font-size:.85rem"></span></h2>
-    <div class="row">
-      <button class="bigbtn good" data-buzz="arm">🟢 Freigeben</button>
-      <button class="bigbtn" data-buzz="reset">🔄 Zurücksetzen</button>
-      <button class="bigbtn bad" data-buzz="lock">🔴 Sperren</button>
-    </div>
-    <div id="buzz-order" class="muted" style="margin-top:10px;"></div>
-  </section>
+    <aside class="admin-side">
+      <!-- Spieler + Punkte -->
+      <section class="card">
+        <h2>Spieler · Coins</h2>
+        <div class="muted" style="font-size:.82rem; margin-bottom:6px;">
+          <b>Coins</b> = Gesamtstand (+1/-1) · <b>Spiel</b> = Platzpunkte für die laufende Auswertung
+        </div>
+        <div id="players"></div>
+        <div class="row" style="margin-top:10px;">
+          <button data-flow="reset-game-points">Spielpunkte auf 0</button>
+        </div>
+      </section>
 
-  <!-- Spieler + Punkte -->
-  <section class="card">
-    <h2>Spieler · Coins</h2>
-    <div class="muted" style="font-size:.82rem; margin-bottom:6px;">
-      <b>Coins</b> = Gesamtstand (+1/-1) · <b>Spiel</b> = Platzpunkte für die laufende Auswertung
-    </div>
-    <div id="players"></div>
-    <div class="row" style="margin-top:10px;">
-      <button data-flow="reset-game-points">🔄 Spielpunkte auf 0</button>
-    </div>
-  </section>
+      <!-- Buzzer -->
+      <section class="card">
+        <h2>Buzzer <span class="muted" id="buzz-state" style="font-size:.85rem"></span></h2>
+        <div class="row">
+          <button class="bigbtn good" data-buzz="arm">Freigeben</button>
+          <button class="bigbtn" data-buzz="reset">Zurücksetzen</button>
+          <button class="bigbtn bad" data-buzz="lock">Sperren</button>
+        </div>
+        <div id="buzz-order" class="muted" style="margin-top:10px;"></div>
+      </section>
 
-  <!-- Spiele (Direktstart / Test) -->
-  <section class="card">
-    <h2>Spiele <span class="muted" style="font-size:.8rem">(Direktstart / Test)</span></h2>
-    <div id="active-game" class="muted" style="margin-bottom:8px;"></div>
-    <div id="games"></div>
-  </section>
+      <!-- Ambientemusik -->
+      <section class="card">
+        <h2>Ambientemusik</h2>
+        <div id="ambient-music-admin"></div>
+      </section>
 
-  <!-- Verbundene Geräte -->
-  <section class="card">
-    <h2>Verbundene Geräte</h2>
-    <div class="clients" id="clients" style="font-size:.9rem;"></div>
-  </section>
+      <!-- Winner Sound -->
+      <section class="card">
+        <h2>Winner Sound</h2>
+        <button class="bigbtn good" id="winner-sound-btn">▶ Winner Sound abspielen</button>
+      </section>
 
-  <!-- Gefahrenzone -->
-  <section class="card">
-    <h2>Zurücksetzen</h2>
-    <button class="bad" id="reset-all">⚠️ Alles zurücksetzen (Coins & Ablauf)</button>
-  </section>
+      <!-- Mini-Casino Crash -->
+      <section class="card">
+        <h2>Mini-Casino · Crash</h2>
+        <div id="crash-admin"></div>
+      </section>
+
+      <!-- Verbundene Geräte -->
+      <section class="card">
+        <h2>Verbundene Geräte</h2>
+        <div class="clients" id="clients" style="font-size:.9rem;"></div>
+      </section>
+
+      <!-- Gefahrenzone -->
+      <section class="card">
+        <h2>Zurücksetzen</h2>
+        <button class="bad" id="reset-all">Alles zurücksetzen (Coins & Ablauf)</button>
+      </section>
+    </aside>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>window.APP_ROLE = 'admin';</script>
