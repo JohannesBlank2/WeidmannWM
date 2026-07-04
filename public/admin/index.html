@@ -6,57 +6,76 @@
   <title>WEIDMANN WM Poker Edition - Admin</title>
   <link rel="stylesheet" href="/shared/style.css" />
   <style>
-    body { padding: 14px; max-width: 1180px; margin: 0 auto; overflow-y: auto; min-height: 100vh; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    section.card { margin-bottom: 14px; }
-    h2 { font-size: 1.1rem; }
-    .admin-layout { display: grid; gap: 14px; align-items: start; }
+    body { padding: 10px 12px; max-width: 1180px; margin: 0 auto; overflow-y: auto; min-height: 100vh; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    section.card { margin-bottom: 10px; padding: 12px; }
+    h2 { font-size: 1rem; margin-bottom: 6px; }
+    .admin-layout { display: grid; gap: 10px; align-items: start; }
     .admin-main, .admin-side { min-width: 0; }
 
     /* Ablauf */
-    .round-banner { font-size: 1.05rem; margin-bottom: 10px; }
-    .round-banner b { font-size: 1.2rem; }
-    .flow button { padding: 12px 14px; font-weight: 700; }
-    .pickrow { margin-top: 10px; }
-    .pickrow .lbl { color: var(--muted); font-size: .85rem; margin-bottom: 6px; }
+    .round-banner { font-size: .95rem; margin-bottom: 8px; }
+    .round-banner b { font-size: 1.05rem; }
+    .flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .flow button { padding: 9px 10px; font-weight: 700; min-height: 38px; }
+    .pickrow { margin-top: 8px; }
+    .pickrow .lbl, .featured-games > .lbl, .compact-label {
+      color: var(--muted); font-size: .76rem; margin-bottom: 2px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .control-cluster { display: grid; gap: 10px; }
+    .direct-start {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center;
+      padding-top: 8px; border-top: 1px solid rgba(111,43,34,.75);
+    }
+    .direct-start label { margin: 0; white-space: nowrap; }
+    .admin-select {
+      width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 800;
+    }
 
     /* Buzzer */
     .phase-pill { padding: 4px 12px; border-radius: 999px; background: var(--panel);
       border: 1px solid var(--line); text-transform: capitalize; font-size: .9rem; }
 
     /* Spieler */
-    .player-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-    .player-row .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
-    .player-row input[type=text] {
-      flex: 1; min-width: 90px; background: var(--panel); border: 1px solid var(--line);
-      color: var(--text); border-radius: 8px; padding: 8px; font: inherit;
+    .player-row {
+      display: grid; grid-template-columns: 14px minmax(92px, 1fr) auto auto; align-items: center;
+      grid-template-areas: "dot name coins game";
+      gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--line);
     }
-    .ptbox { display: inline-flex; align-items: center; gap: 6px; }
+    .player-row .dot { grid-area: dot; width: 12px; height: 12px; border-radius: 50%; }
+    .player-row input[type=text] {
+      grid-area: name;
+      width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 7px; padding: 6px 8px; font: inherit; font-weight: 800;
+    }
+    .ptbox { display: inline-grid; grid-template-columns: auto 34px 42px 34px; align-items: center; gap: 4px; }
+    .player-row .ptbox:not(.game) { grid-area: coins; }
+    .player-row .ptbox.game { grid-area: game; }
     .ptbox .tag { color: var(--muted); font-size: .75rem; }
-    .ptbox .sc { font-weight: 800; font-size: 1.2rem; min-width: 2.2ch; text-align: center; }
+    .ptbox .sc { font-weight: 800; font-size: 1rem; min-width: 2.2ch; text-align: center; }
     .ptbox.game .sc { color: var(--accent); }
-    .ptbox button { padding: 8px 12px; min-width: 40px; }
+    .ptbox button { padding: 6px 6px; min-width: 0; font-weight: 900; }
     .score-input {
-      width: 58px; background: var(--panel); border: 1px solid var(--line);
-      color: var(--text); border-radius: 8px; padding: 8px 6px; font: inherit;
-      font-size: 1.1rem; font-weight: 900; text-align: center;
+      width: 42px; background: var(--panel); border: 1px solid var(--line);
+      color: var(--text); border-radius: 7px; padding: 6px 4px; font: inherit;
+      font-size: .98rem; font-weight: 900; text-align: center;
     }
     .ptbox.game .score-input { color: var(--accent); }
 
     .ambient-admin-status {
-      display: grid; gap: 4px; margin-bottom: 10px;
+      margin-bottom: 8px;
       color: var(--muted); font-weight: 800;
+      font-size: .82rem;
     }
-    .ambient-admin-status b { color: var(--accent); font-size: 1.05rem; }
-    .ambient-track-list { display: grid; gap: 7px; margin-top: 10px; }
-    .ambient-track-list button {
-      display: grid; gap: 3px; text-align: left; padding: 10px 12px;
+    .ambient-admin-status b { color: var(--accent); font-size: 1rem; }
+    .ambient-admin-compact {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center;
     }
-    .ambient-track-list span { color: var(--muted); font-size: .82rem; font-weight: 800; }
-    .ambient-track-list button.primary span { color: rgba(36,17,4,.72); }
     .ambient-volume {
-      display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 10px; align-items: center;
-      margin-top: 12px; color: var(--muted); font-weight: 900;
+      display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; align-items: center;
+      margin-top: 8px; color: var(--muted); font-weight: 900;
     }
     .ambient-volume input { width: 100%; accent-color: var(--accent); }
 
@@ -66,33 +85,30 @@
     .game-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
     .game-item .info .nm { font-weight: 700; }
     .game-item .info .mt { color: var(--muted); font-size: .85rem; }
-    .bigbtn { flex: 1; padding: 16px; font-size: 1.05rem; font-weight: 700; }
-    .featured-games { display: grid; gap: 8px; margin-top: 12px; }
+    .bigbtn { flex: 1; padding: 11px 12px; font-size: .98rem; font-weight: 700; }
+    .featured-games { display: grid; gap: 6px; }
     .featured-game-row {
-      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch;
-      padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+      display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 6px; align-items: center;
+      padding: 6px 7px; border: 1px solid var(--line); border-radius: 8px;
       background: rgba(18, 7, 10, .45);
     }
     .featured-game-row.current {
       border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,209,92,.2) inset;
     }
-    .featured-game-title {
-      display: grid; gap: 5px; min-width: 0;
-    }
-    .featured-game-title label {
+    .featured-game-slot {
       color: var(--muted); font-size: .78rem; font-weight: 800; text-transform: uppercase;
-      letter-spacing: .04em;
+      letter-spacing: .04em; white-space: nowrap;
     }
     .featured-game-name {
       width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line);
-      color: var(--text); border-radius: 8px; padding: 9px 10px; font: inherit; font-weight: 800;
+      color: var(--text); border-radius: 7px; padding: 7px 9px; font: inherit; font-weight: 800;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .featured-game-row.current .featured-game-name { border-color: var(--accent); }
-    .featured-game-action {
-      min-width: 118px; font-weight: 800;
-    }
+    .featured-game-action { min-width: 76px; padding: 8px 10px; font-weight: 800; }
     .featured-game-meta {
-      grid-column: 1 / -1; color: var(--muted); font-size: .8rem; font-weight: 700;
+      grid-column: 2 / -1; color: var(--muted); font-size: .76rem; font-weight: 700;
+      margin-top: -3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .spin-admin-list { display: grid; gap: 8px; margin-top: 8px; }
     .game-detail.mini { padding: 10px 12px; }
@@ -185,11 +201,38 @@
       color: var(--accent); border-radius: 8px; padding: 8px 10px; font: inherit;
       font-weight: 900; text-align: right;
     }
+    .utility-card { padding: 10px 12px; }
+    .utility-card h2 { margin-bottom: 6px; }
+    .utility-card details > summary {
+      cursor: pointer; font-size: 1rem; font-weight: 900;
+      list-style-position: inside;
+    }
+    .utility-card details > div { margin-top: 10px; }
     @media (min-width: 900px) {
-      body { padding: 16px 20px; }
-      .admin-layout { grid-template-columns: minmax(0, 1.18fr) minmax(340px, .82fr); }
+      body { padding: 12px 16px; }
+      .admin-layout { grid-template-columns: minmax(0, 1fr) minmax(450px, .9fr); }
+    }
+    @media (max-width: 980px) {
+      .player-row {
+        grid-template-columns: 12px minmax(92px, 1fr) auto;
+        grid-template-areas:
+          "dot name coins"
+          ". . game";
+      }
+      .ptbox { grid-template-columns: auto 32px 40px 32px; }
+    }
+    @media (max-width: 720px) {
+      .flow, .direct-start, .featured-game-row { grid-template-columns: 1fr; }
+      .featured-game-meta { grid-column: auto; }
     }
     @media (max-width: 560px) {
+      .player-row {
+        grid-template-columns: 12px minmax(92px, 1fr);
+        grid-template-areas:
+          "dot name"
+          "coins coins"
+          "game game";
+      }
       .fish-item-admin { grid-template-columns: 1fr; }
       .fish-total-admin-row { grid-template-columns: 1fr; }
     }
@@ -215,15 +258,16 @@
           <button class="bad" data-flow="stop-game">Spiel beenden → Auswertung</button>
           <button data-flow="goto-finale">→ Finale</button>
         </div>
-        <div class="featured-games" id="featured-games"></div>
+        <div class="control-cluster" style="margin-top:10px;">
+          <div class="featured-games" id="featured-games"></div>
+          <div class="direct-start">
+            <label class="compact-label" for="game-start-select">Weiterer Direktstart</label>
+            <select class="admin-select" id="game-start-select"></select>
+            <button class="primary" id="game-start-btn">Starten</button>
+          </div>
+        </div>
         <div class="pickrow" id="picker-area"></div>
-      </section>
-
-      <!-- Spiele (Direktstart / Test) -->
-      <section class="card">
-        <h2>Spiele <span class="muted" style="font-size:.8rem">(Direktstart)</span></h2>
-        <div id="active-game" class="muted" style="margin-bottom:8px;"></div>
-        <div id="games"></div>
+        <div id="active-game" class="muted" style="margin-top:8px;"></div>
       </section>
     </main>
 
@@ -231,9 +275,6 @@
       <!-- Spieler + Punkte -->
       <section class="card">
         <h2>Spieler · Coins</h2>
-        <div class="muted" style="font-size:.82rem; margin-bottom:6px;">
-          <b>Coins</b> = Gesamtstand (+1/-1) · <b>Spiel</b> = Platzpunkte für die laufende Auswertung
-        </div>
         <div id="players"></div>
         <div class="row" style="margin-top:10px;">
           <button data-flow="reset-game-points">Spielpunkte auf 0</button>
@@ -251,34 +292,26 @@
         <div id="buzz-order" class="muted" style="margin-top:10px;"></div>
       </section>
 
-      <!-- Ambientemusik -->
-      <section class="card">
-        <h2>Ambientemusik</h2>
+      <!-- Audio -->
+      <section class="card utility-card">
+        <h2>Audio</h2>
         <div id="ambient-music-admin"></div>
+        <button class="bigbtn good" id="winner-sound-btn" style="margin-top:8px;">▶ Winner Sound abspielen</button>
       </section>
 
-      <!-- Winner Sound -->
-      <section class="card">
-        <h2>Winner Sound</h2>
-        <button class="bigbtn good" id="winner-sound-btn">▶ Winner Sound abspielen</button>
-      </section>
-
-      <!-- Mini-Casino Crash -->
-      <section class="card">
-        <h2>Mini-Casino · Crash</h2>
-        <div id="crash-admin"></div>
-      </section>
-
-      <!-- Verbundene Geräte -->
-      <section class="card">
-        <h2>Verbundene Geräte</h2>
-        <div class="clients" id="clients" style="font-size:.9rem;"></div>
-      </section>
-
-      <!-- Gefahrenzone -->
-      <section class="card">
-        <h2>Zurücksetzen</h2>
-        <button class="bad" id="reset-all">Alles zurücksetzen (Coins & Ablauf)</button>
+      <!-- Weitere Tools -->
+      <section class="card utility-card">
+        <details>
+          <summary>Weitere Tools</summary>
+          <div>
+            <h2>Mini-Casino · Crash</h2>
+            <div id="crash-admin"></div>
+          </div>
+          <div>
+            <h2>Zurücksetzen</h2>
+            <button class="bad" id="reset-all">Alles zurücksetzen (Coins & Ablauf)</button>
+          </div>
+        </details>
       </section>
     </aside>
   </div>

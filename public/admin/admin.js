@@ -8,8 +8,9 @@
   const playersEl = document.getElementById('players') || document.getElementById('teams');
   const featuredGamesEl = document.getElementById('featured-games');
   const gamesEl = document.getElementById('games');
+  const gameStartSelectEl = document.getElementById('game-start-select');
+  const gameStartButtonEl = document.getElementById('game-start-btn');
   const activeGameEl = document.getElementById('active-game');
-  const clientsEl = document.getElementById('clients');
   const ambientMusicEl = document.getElementById('ambient-music-admin');
   const winnerSoundBtn = document.getElementById('winner-sound-btn');
 
@@ -93,22 +94,32 @@
         return;
       }
 
-      const trackButton = target.closest('[data-ambient-track]');
-      if (trackButton && ambientMusicEl.contains(trackButton)) {
-        App.socket.emit('admin:ambient-music', {
-          enabled: true,
-          trackId: trackButton.dataset.ambientTrack,
-        });
-      }
     });
 
     ambientMusicEl.addEventListener('change', (event) => {
-      const target = event.target instanceof HTMLInputElement ? event.target : null;
-      if (!target || !target.matches('[data-ambient-volume]')) return;
-      App.socket.emit('admin:ambient-music', {
-        volume: Number(target.value),
-      });
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!target) return;
+
+      if (target.matches('[data-ambient-volume]')) {
+        App.socket.emit('admin:ambient-music', {
+          volume: Number(target.value),
+        });
+      }
+
+      if (target.matches('[data-ambient-track-select]')) {
+        App.socket.emit('admin:ambient-music', {
+          enabled: true,
+          trackId: target.value,
+        });
+      }
     });
+  }
+
+  if (gameStartButtonEl && gameStartSelectEl) {
+    gameStartButtonEl.onclick = () => {
+      if (!gameStartSelectEl.value) return;
+      App.socket.emit('admin:start-game', { gameId: gameStartSelectEl.value });
+    };
   }
 
   function renderAblauf(state) {
@@ -352,29 +363,24 @@
     const selected = AMBIENT_TRACKS.find((track) => track.id === music.trackId) || AMBIENT_TRACKS[0];
     ambientMusicEl.innerHTML = `
       <div class="ambient-admin-status">
-        <span>Status: <b>${music.enabled ? 'läuft' : 'aus'}</b></span>
-        <span>Aktuell: ${esc(selected.label)} · Lautstärke ${music.volume}%</span>
+        Status: <b>${music.enabled ? 'läuft' : 'aus'}</b> · ${esc(selected.label)} · ${music.volume}%
       </div>
-      <div class="row">
+      <div class="ambient-admin-compact">
+        <select class="admin-select" data-ambient-track-select>
+          ${AMBIENT_TRACKS.map((track) => `
+            <option value="${esc(track.id)}" ${track.id === selected.id ? 'selected' : ''}>
+              ${esc(track.label)}
+            </option>
+          `).join('')}
+        </select>
         <button class="${music.enabled ? 'bad' : 'good'}" data-ambient-enabled="${music.enabled ? '0' : '1'}">
           ${music.enabled ? 'Ausschalten' : 'Einschalten'}
         </button>
       </div>
-      <div class="ambient-track-list">
-        ${AMBIENT_TRACKS.map((track) => `
-          <button class="${track.id === music.trackId && music.enabled ? 'primary' : ''}" data-ambient-track="${track.id}">
-            <b>${esc(track.label)}</b>
-            <span>${esc(track.file)}</span>
-          </button>
-        `).join('')}
-      </div>
       <label class="ambient-volume">
         <input type="range" min="0" max="100" step="1" value="${music.volume}" data-ambient-volume />
         <span>${music.volume}%</span>
-      </label>
-      <div class="muted" style="font-size:.82rem; margin-top:8px;">
-        Steuerung nur hier in der Admin-Ansicht; auf dem TV bleibt der Player unsichtbar.
-      </div>`;
+      </label>`;
   }
 
   function ambientMusicState(state) {
@@ -449,23 +455,43 @@
       ? `Aktiv: <b>${esc(state.activeGame.title || state.activeGame.name)}</b>${fishAdminControls(state)}${halbeSachenAdminControls(state)}${dartRingeAdminControls(state)}${woLiegtWasAdminControls(state)}${musikErratenPlaylistAdminControls(state)}${percentQuizAdminControls(state)}`
       : 'Kein Spiel aktiv.';
 
-    gamesEl.innerHTML =
-      games
-        .map((g) => `
-      <div class="game-item">
-        <div class="info">
-          <div class="nm">${esc(g.title || g.name)}</div>
-          <div class="mt">${categoryLabel(g.category)} &middot; ${g.interaktionstyp}${g.built === false ? ' &middot; Platzhalter' : ''}</div>
-        </div>
-        <button class="${activeId === g.id ? 'good' : 'primary'}" data-start="${g.id}">
-          ${activeId === g.id ? 'läuft' : 'Starten'}
-        </button>
-      </div>`)
-        .join('') || '<div class="muted">Keine Spiele registriert.</div>';
+    if (gameStartSelectEl) {
+      const previous = gameStartSelectEl.value;
+      gameStartSelectEl.innerHTML =
+        games
+          .map((g) => `
+            <option value="${esc(g.id)}">
+              ${esc(g.title || g.name)} · ${esc(categoryLabel(g.category))}${g.built === false ? ' · Platzhalter' : ''}
+            </option>`)
+          .join('');
+      const selectedId = games.some((g) => g.id === previous)
+        ? previous
+        : activeId && games.some((g) => g.id === activeId)
+        ? activeId
+        : games[0] && games[0].id;
+      if (selectedId) gameStartSelectEl.value = selectedId;
+      if (gameStartButtonEl) gameStartButtonEl.disabled = !games.length;
+    }
 
-    gamesEl.querySelectorAll('[data-start]').forEach((b) => {
-      b.onclick = () => App.socket.emit('admin:start-game', { gameId: b.dataset.start });
-    });
+    if (gamesEl) {
+      gamesEl.innerHTML =
+        games
+          .map((g) => `
+        <div class="game-item">
+          <div class="info">
+            <div class="nm">${esc(g.title || g.name)}</div>
+            <div class="mt">${categoryLabel(g.category)} &middot; ${g.interaktionstyp}${g.built === false ? ' &middot; Platzhalter' : ''}</div>
+          </div>
+          <button class="${activeId === g.id ? 'good' : 'primary'}" data-start="${g.id}">
+            ${activeId === g.id ? 'läuft' : 'Starten'}
+          </button>
+        </div>`)
+          .join('') || '<div class="muted">Keine Spiele registriert.</div>';
+
+      gamesEl.querySelectorAll('[data-start]').forEach((b) => {
+        b.onclick = () => App.socket.emit('admin:start-game', { gameId: b.dataset.start });
+      });
+    }
     wireFishAdminControls();
     wireWoLiegtWasAdminControls();
     wireHalbeSachenAdminControls();
@@ -1515,6 +1541,7 @@
 
   function renderFeaturedGames(state) {
     const currentGameId = state.round && state.round.gameId;
+    const currentActiveGameId = state.activeGame && state.activeGame.id;
     const introRunning = state.phase === 'spiel-intro';
     featuredGamesEl.innerHTML =
       '<div class="lbl">Feste Show-Reihenfolge:</div>' +
@@ -1525,12 +1552,13 @@
           const title = game.title || game.defaultTitle;
           return `
             <div class="featured-game-row ${isCurrent ? 'current' : ''}">
-              <div class="featured-game-title">
-                <label>Spiel ${game.slot}</label>
-                <div class="featured-game-name">${esc(title)}</div>
-              </div>
+              <div class="featured-game-slot">Spiel ${game.slot}</div>
+              <div class="featured-game-name">${esc(title)}</div>
               <button class="featured-game-action ${isCurrent ? 'primary' : ''}" data-featured-slot="${game.slot}">
                 Anzeigen
+              </button>
+              <button class="featured-game-action ${currentActiveGameId === game.gameId ? 'good' : ''}" data-featured-start="${esc(game.gameId)}">
+                ${currentActiveGameId === game.gameId ? 'läuft' : 'Starten'}
               </button>
               <div class="featured-game-meta">${animationLabel(game.animation)} &middot; ${esc(game.gameId)}</div>
             </div>`;
@@ -1542,6 +1570,9 @@
       btn.onclick = () =>
         App.socket.emit('admin:prepare-featured-game', { slot: Number(btn.dataset.featuredSlot) });
     });
+    featuredGamesEl.querySelectorAll('[data-featured-start]').forEach((btn) => {
+      btn.onclick = () => App.socket.emit('admin:start-game', { gameId: btn.dataset.featuredStart });
+    });
   }
 
   document.getElementById('reset-all').onclick = () => {
@@ -1550,32 +1581,6 @@
     }
   };
 
-  function renderClients(state) {
-    const byPlayer = Object.fromEntries(state.players.map((p) => [p.id, p]));
-    const entries = Object.entries(state.clients);
-    if (!entries.length) {
-      clientsEl.innerHTML = '<span class="muted">keine</span>';
-      return;
-    }
-    clientsEl.innerHTML = entries
-      .map(([id, c]) => {
-        const player = c.playerId && byPlayer[c.playerId];
-        const color = c.connected ? 'var(--good)' : 'var(--bad)';
-        const label = player
-          ? esc(player.name)
-          : c.role === 'admin'
-          ? 'Admin'
-          : c.role === 'display'
-          ? 'TV'
-          : 'kein Spieler';
-        return `<span class="client-pill">
-        <span class="d" style="background:${color}"></span>
-        ${label} <span class="muted">${id.slice(0, 6)}</span>
-      </span>`;
-      })
-      .join('');
-  }
-
   App.onState((state) => {
     renderAblauf(state);
     renderBuzzer(state);
@@ -1583,7 +1588,6 @@
     renderPlayers(state);
     renderFeaturedGames(state);
     renderGames(state);
-    renderClients(state);
   });
 
   function gameDetails(game) {
