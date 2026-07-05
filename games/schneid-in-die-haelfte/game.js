@@ -44,6 +44,31 @@ module.exports = {
       return;
     }
 
+    if (action.type === 'halbe:start-timer') {
+      const seconds = Math.max(1, Math.min(600, Number(action.seconds) || 30));
+      const startedAt = Date.now();
+      ctx.setGameState({
+        ...state,
+        timer: {
+          running: true,
+          durationSeconds: seconds,
+          startedAt,
+          endsAt: startedAt + (seconds * 1000),
+        },
+        adminWarning: '',
+      });
+      return;
+    }
+
+    if (action.type === 'halbe:stop-timer') {
+      ctx.setGameState({
+        ...state,
+        timer: defaultTimerState(),
+        adminWarning: '',
+      });
+      return;
+    }
+
     if (action.type === 'halbe:reveal') {
       ctx.setGameState({
         ...withResults(state, ctx.state.players),
@@ -95,6 +120,7 @@ function defaultGameState(players = [], roundNumber = 1) {
     totals: Object.fromEntries(players.map((player) => [player.id, 0])),
     scoredRounds: 0,
     revealedAt: null,
+    timer: defaultTimerState(),
     adminWarning: '',
   };
 }
@@ -131,6 +157,7 @@ function ensureGameState(value, players = []) {
     totals: normalizeTotals(saved.totals, players),
     scoredRounds: Number.isInteger(saved.scoredRounds) ? saved.scoredRounds : 0,
     revealedAt: Number(saved.revealedAt) || null,
+    timer: normalizeTimer(saved.timer),
     adminWarning: normalizeText(saved.adminWarning, 160),
   };
 
@@ -232,6 +259,30 @@ function normalizeTotals(value, players = []) {
     player.id,
     roundWeight(Math.max(0, Number(saved[player.id]) || 0)),
   ]));
+}
+
+function defaultTimerState() {
+  return {
+    running: false,
+    durationSeconds: 30,
+    startedAt: null,
+    endsAt: null,
+  };
+}
+
+function normalizeTimer(value) {
+  const raw = value && typeof value === 'object' ? value : {};
+  const endsAt = Number(raw.endsAt) || null;
+  const startedAt = Number(raw.startedAt) || null;
+  const durationSeconds = Math.max(1, Math.min(600, Number(raw.durationSeconds) || 30));
+  const running = raw.running === true && endsAt && endsAt > Date.now();
+
+  return {
+    running,
+    durationSeconds,
+    startedAt: running ? startedAt : null,
+    endsAt: running ? endsAt : null,
+  };
 }
 
 function normalizeWeight(value) {

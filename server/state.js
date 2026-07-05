@@ -50,7 +50,6 @@ const MAX_BET = 50;
 const CRASH_MIN_POINT = 120;
 const CRASH_MAX_POINT = 1000;
 const CRASH_TICK_MS = 75;
-const CRASH_MAX_STAKE = 100;
 const CRASH_DEFAULT_SETTINGS = {
   minCrashPoint: CRASH_MIN_POINT / 100,
   maxCrashPoint: CRASH_MAX_POINT / 100,
@@ -492,6 +491,36 @@ class GameState {
     if (!player) return false;
     delete this.state.round.placements[player.id];
     player.gameScore = 0;
+    this.touch();
+    return true;
+  }
+
+  setPlacementOrder(playerIds = []) {
+    if (this.state.phase !== 'auswertung') return false;
+    if (this.state.round.payoutApplied) return false;
+
+    const uniqueIds = [];
+    for (const playerId of Array.isArray(playerIds) ? playerIds : []) {
+      const player = this._player(playerId);
+      if (!player || uniqueIds.includes(player.id)) continue;
+      uniqueIds.push(player.id);
+      if (uniqueIds.length >= this.state.players.length - 1) break;
+    }
+
+    const placements = {};
+    uniqueIds.forEach((playerId, index) => {
+      placements[playerId] = index + 2;
+    });
+
+    if (uniqueIds.length === this.state.players.length - 1) {
+      const winner = this.state.players.find((player) => !uniqueIds.includes(player.id));
+      if (winner) placements[winner.id] = 1;
+    }
+
+    this.state.round.placements = placements;
+    this.state.players.forEach((player) => {
+      player.gameScore = RANK_AWARDS[placements[player.id]] || 0;
+    });
     this.touch();
     return true;
   }
@@ -952,7 +981,7 @@ class GameState {
       ...entry,
       playerId: player.id,
       name: player.name,
-      stake: clampCrashStake(stake),
+      stake: clampCrashStake(stake, player.score),
       cashedOut: false,
       cashoutMultiplier: null,
       payout: 0,
@@ -1290,7 +1319,7 @@ function normalizeCrashGame(crashGame, players) {
     crashedAt: Number(crashGame.crashedAt) || null,
     payoutApplied: crashGame.payoutApplied === true,
     settings: normalizeCrashSettings(crashGame.settings),
-    players: normalizeCrashPlayers(crashGame.players, players),
+    players: normalizeCrashPlayers(crashGame.players, players, phase === 'ready' || phase === 'running'),
   };
 
   if (phase === 'idle') {
@@ -1329,12 +1358,13 @@ function buildCrashPlayers(players, stakes = {}) {
   );
 }
 
-function normalizeCrashPlayers(savedPlayers, players) {
+function normalizeCrashPlayers(savedPlayers, players, clampToScore = true) {
   const saved = savedPlayers && typeof savedPlayers === 'object' ? savedPlayers : {};
   return Object.fromEntries(
     players.map((player) => {
       const entry = saved[player.id] || {};
-      const stake = clampCrashStake(entry.stake);
+      const maxStake = clampToScore ? player.score : Number.MAX_SAFE_INTEGER;
+      const stake = clampCrashStake(entry.stake, maxStake);
       const cashoutMultiplier = Number(entry.cashoutMultiplier);
       const payout = clampInt(entry.payout, 0, Number.MAX_SAFE_INTEGER);
       return [
@@ -1359,7 +1389,7 @@ function crashPlayer(player, stake = 0) {
   return {
     playerId: player.id,
     name: player.name,
-    stake: clampCrashStake(stake),
+    stake: clampCrashStake(stake, player.score),
     cashedOut: false,
     cashoutMultiplier: null,
     payout: 0,
@@ -1510,8 +1540,9 @@ function randomCrashPoint(settings) {
   return round2(crypto.randomInt(min, max + 1) / 100);
 }
 
-function clampCrashStake(value) {
-  return roundToNearestFive(clampInt(value, 0, CRASH_MAX_STAKE));
+function clampCrashStake(value, maxStake = Number.MAX_SAFE_INTEGER) {
+  const max = Math.max(0, Math.floor(Number(maxStake) || 0));
+  return Math.min(max, roundToNearestFive(clampInt(value, 0, max)));
 }
 
 function round2(value) {
@@ -1547,7 +1578,6 @@ module.exports = {
   SPIN_DURATION_MS,
   STARTING_COINS,
   MAX_BET,
-  CRASH_MAX_STAKE,
   CRASH_TICK_MS,
   FEATURED_GAMES,
   RANK_AWARDS,

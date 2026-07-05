@@ -64,7 +64,7 @@
 
     root.querySelectorAll('[data-crash-stake]').forEach((input) => {
       input.onchange = () => {
-        const amount = clampStake(input.value);
+        const amount = clampStake(input.value, input.dataset.maxStake);
         input.value = amount;
         App.socket.emit('admin:crash-set-stake', {
           playerId: input.dataset.player,
@@ -158,6 +158,7 @@
     const net = entry.stake > 0 && phase === 'crashed'
       ? `${entry.netDelta >= 0 ? '+' : ''}${entry.netDelta}`
       : '-';
+    const maxStake = Math.max(0, Math.floor(Number(player.score) || 0));
 
     return `
       <div class="crash-admin-row ${entry.stake > 0 ? 'active' : ''} ${entry.cashedOut ? 'won' : ''} ${entry.lost ? 'lost' : ''}">
@@ -167,8 +168,8 @@
         </div>
         <label>
           <span>Einsatz</span>
-          <input type="number" min="0" max="100" step="5" value="${entry.stake}"
-            data-crash-stake data-player="${player.id}" ${readonly ? 'disabled' : ''} />
+          <input type="number" min="0" max="${maxStake}" step="5" value="${entry.stake}"
+            data-crash-stake data-player="${player.id}" data-max-stake="${maxStake}" ${readonly ? 'disabled' : ''} />
         </label>
         <div>
           <span>Status</span>
@@ -219,9 +220,10 @@
     };
   }
 
-  function clampStake(value) {
+  function clampStake(value, maxStake) {
     const number = Math.round(Number(value) || 0);
-    return Math.max(0, Math.min(100, Math.round(number / 5) * 5));
+    const max = Math.max(0, Math.floor(Number(maxStake) || 0));
+    return Math.min(max, Math.max(0, Math.round(number / 5) * 5));
   }
 
   function crashSettings(crash) {

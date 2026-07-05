@@ -240,7 +240,7 @@ function defaultTimer() {
 function resetTimer(timer) {
   return {
     ...defaultTimer(),
-    durationSeconds: clampInt(timer && timer.durationSeconds, 5, 600) || DEFAULT_TIMER_SECONDS,
+    durationSeconds: DEFAULT_TIMER_SECONDS,
   };
 }
 
@@ -278,7 +278,7 @@ function normalizeTimer(value) {
   const base = defaultTimer();
   const saved = value && typeof value === 'object' ? value : {};
   return {
-    durationSeconds: clampInt(saved.durationSeconds, 5, 600) || base.durationSeconds,
+    durationSeconds: base.durationSeconds,
     startedAt: Number(saved.startedAt) || null,
     endsAt: Number(saved.endsAt) || null,
     running: saved.running === true,
@@ -288,12 +288,14 @@ function normalizeTimer(value) {
 function normalizeSolution(value) {
   if (!value || typeof value !== 'object') return null;
   if (!questionById(value.questionId)) return null;
+  const imageSrc = String(value.imageSrc || '');
   return {
     questionId: value.questionId,
     value: String(value.value || ''),
     label: String(value.label || ''),
     explanation: String(value.explanation || ''),
-    imageSrc: String(value.imageSrc || ''),
+    imageSrc,
+    imageExists: imageSrc ? assetExists(imageSrc) : false,
     answerRevealed: value.answerRevealed === true,
     overlayCount: Math.max(0, Number(value.overlayCount) || 0),
     revealedOverlays: Array.isArray(value.revealedOverlays) ? value.revealedOverlays : [],
@@ -362,7 +364,7 @@ function normalizePayoutsByQuestionId(value) {
 // und die Lösungs-Einblendungen bleiben deshalb serverseitig, bis sie
 // aufgedeckt werden. Für die Admin-Buttons gehen nur neutrale Labels raus.
 function questionsForClients() {
-  return PERCENT_QUIZ_QUESTIONS.map(({ correctAnswer, explanation, solutionSteps, ...question }) => ({
+  return PERCENT_QUIZ_QUESTIONS.map(({ correctAnswer, explanation, solutionImageSrc, solutionSteps, ...question }) => ({
     ...question,
     imageExists: question.imageSrc ? assetExists(question.imageSrc) : false,
     solutionStepLabels: (solutionSteps || []).map((step) => step.adminLabel),
@@ -415,13 +417,12 @@ function changeRevealStep(ctx, state, delta) {
   });
 }
 
-function startTimer(ctx, state, seconds) {
+function startTimer(ctx, state) {
   if (!state.selectedQuestionId) {
     ctx.setGameState({ ...state, adminWarning: 'Bitte zuerst eine Frage auswählen.' });
     return;
   }
-  // Fest 30 Sekunden, außer es wird explizit etwas anderes mitgeschickt.
-  const durationSeconds = clampInt(seconds, 5, 600) || DEFAULT_TIMER_SECONDS;
+  const durationSeconds = DEFAULT_TIMER_SECONDS;
   const now = Date.now();
   ctx.setGameState({
     ...state,
@@ -685,9 +686,11 @@ function solutionAnswerRevealed(question, solutionStep) {
 function buildSolutionPayload(question, solutionStep) {
   const overlays = question.solutionSteps || [];
   const answerRevealed = solutionAnswerRevealed(question, solutionStep);
+  const imageSrc = question.solutionImageSrc || question.imageSrc || '';
   return {
     questionId: question.id,
-    imageSrc: question.imageSrc || '',
+    imageSrc,
+    imageExists: imageSrc ? assetExists(imageSrc) : false,
     overlayCount: overlays.length,
     revealedOverlays: overlays.slice(0, Math.min(solutionStep, overlays.length)).map((step) => ({
       id: step.id,

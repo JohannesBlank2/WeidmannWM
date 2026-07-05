@@ -131,7 +131,7 @@ function questionPartsHtml(game, question) {
     parts.push(`
       <div class="percent-panel-row">
         <div class="percent-text-panel">${escapeHtml(question.questionText)}</div>
-        <div class="percent-image-panel percent-note-panel">${noteSvg()}</div>
+        <div class="percent-image-panel percent-note-panel">${questionNoteHtml(question)}</div>
       </div>`);
     if (game.revealStep >= 2) {
       parts.push(`
@@ -150,25 +150,56 @@ function questionPartsHtml(game, question) {
     return parts.join('');
   }
 
-  const parts = [`<div class="percent-text-panel percent-text-wide">${escapeHtml(question.questionText)}</div>`];
-  if (game.revealStep >= 2) {
-    if (question.visual === 'diagram') {
-      parts.push(`<div class="percent-image-panel percent-diagram-panel">${diagramSvg()}</div>`);
-    } else if (question.visual === 'dice') {
-      parts.push(`<div class="percent-image-panel percent-dice-panel">${diceSvg()}</div>`);
-    } else if (question.visual === 'photo') {
-      parts.push(`<div class="percent-image-panel percent-photo-panel">${questionPhotoHtml(question)}</div>`);
-    }
+  const textPanel = `<div class="percent-text-panel percent-text-wide">${escapeHtml(question.questionText)}</div>`;
+  if (game.revealStep < 2) return textPanel;
+
+  const imagePanel = questionImagePanelHtml(question);
+  if (imagePanel) {
+    return `
+      <div class="percent-media-row">
+        <div class="percent-text-panel percent-question-copy">${escapeHtml(question.questionText)}</div>
+        ${imagePanel}
+      </div>`;
   }
-  return parts.join('');
+  return textPanel;
+}
+
+function questionImagePanelHtml(question) {
+  if (question.visual === 'diagram') {
+    return `<div class="percent-image-panel percent-diagram-panel">${diagramSvg()}</div>`;
+  }
+  if (question.visual === 'dice') {
+    return `<div class="percent-image-panel percent-dice-panel">${diceSvg()}</div>`;
+  }
+  if (question.visual === 'photo') {
+    return `<div class="percent-image-panel percent-photo-panel">${questionPhotoHtml(question)}</div>`;
+  }
+  return '';
+}
+
+function questionNoteHtml(question) {
+  if (question.imageSrc && question.imageExists) {
+    return `<img class="percent-note-photo" src="${escapeHtml(question.imageSrc)}" alt="" />`;
+  }
+  if (question.id === 'percent-10') {
+    return '<img class="percent-note-photo" src="/assets/games/prozentquiz/10-note.png" alt="" />';
+  }
+  return noteSvg();
 }
 
 function questionPhotoHtml(question) {
-  if (question.imageSrc && question.imageExists) {
-    return `<img class="percent-photo" src="${escapeHtml(question.imageSrc)}" alt="" />`;
-  }
+  const imageSrc = questionPhotoSrc(question);
+  if (imageSrc) return `<img class="percent-photo" src="${escapeHtml(imageSrc)}" alt="" />`;
+  if (question.fallbackVisual === 'diagram') return diagramSvg();
+  if (question.fallbackVisual === 'dice') return diceSvg();
   // Fallback, solange die Fotodatei noch nicht abgelegt wurde.
   return diceSvg();
+}
+
+function questionPhotoSrc(question) {
+  if (question && question.imageSrc && question.imageExists) return question.imageSrc;
+  if (question && question.id === 'percent-1') return '/assets/games/prozentquiz/1-question.png';
+  return '';
 }
 
 function timerBarHtml(game, question, players) {
@@ -208,13 +239,69 @@ function solutionHtml(game, question, players) {
   if (game.solution.overlayCount > 0) {
     return steppedSolutionHtml(game, question, players);
   }
+  if (question.id === 'percent-10') {
+    return commissarSolutionHtml(game, question, players);
+  }
+  const solutionImage = solutionImageHtml(game.solution, question);
+  const answerHtml = solutionImage
+    ? `<div class="percent-solution-main-row">${solutionImage}</div>`
+    : `<div class="percent-solution-answer">${escapeHtml(game.solution.label)}</div>`;
+
   return `
-    <div class="percent-solution-stage">
+    <div class="percent-solution-stage${solutionImage ? ' with-image' : ''}">
       <div class="percent-brand">WEIDMANN WM Poker Edition</div>
       <div class="percent-solution-title">Lösung · ${escapeHtml(question.label)}</div>
-      <div class="percent-solution-answer">${escapeHtml(game.solution.label)}</div>
+      ${answerHtml}
       ${game.solution.explanation
         ? `<div class="percent-solution-explain">${escapeHtml(game.solution.explanation)}</div>`
+        : ''}
+      ${solutionResultCardsHtml(game, question, players)}
+    </div>`;
+}
+
+function solutionImageHtml(solution, question) {
+  const imageSrc = solutionImageSrc(solution, question);
+  if (!imageSrc) return '';
+  return `
+    <div class="percent-solution-image">
+      <img src="${escapeHtml(imageSrc)}" alt="" />
+    </div>`;
+}
+
+function solutionImageSrc(solution, question) {
+  if (solution && solution.imageSrc && solution.imageExists) return solution.imageSrc;
+  if (question && question.id === 'percent-25') return '/assets/games/prozentquiz/25-solution.png';
+  return '';
+}
+
+function commissarSolutionHtml(game, question, players) {
+  const correctValue = game.solution && game.solution.value ? game.solution.value : 'B';
+  return `
+    <div class="percent-solution-stage percent-commissar-solution">
+      <div class="percent-brand">WEIDMANN WM Poker Edition</div>
+      <div class="percent-solution-title">Lösung · ${escapeHtml(question.label)}</div>
+      <div class="percent-commissar-board">
+        <div class="percent-commissar-top">
+          <div class="percent-text-panel percent-commissar-story">${escapeHtml(question.questionText)}</div>
+          <div class="percent-commissar-note-box">
+            <div class="percent-commissar-note">${questionNoteHtml(question)}</div>
+            <div class="percent-bert-log">BERT LOG</div>
+          </div>
+        </div>
+        <div class="percent-commissar-bottom">
+          <div class="percent-text-panel percent-commissar-question">${escapeHtml(question.subQuestionText)}</div>
+          <div class="percent-commissar-options">
+            ${(question.options || []).map((option) => `
+              <div class="percent-option-plate ${option.value === correctValue ? 'correct' : ''}">
+                <span class="percent-option-letter">${escapeHtml(option.value)}</span>
+                <span class="percent-option-name">${escapeHtml(option.label)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+      ${game.solution.explanation
+        ? `<div class="percent-solution-explain percent-commissar-explain">${escapeHtml(game.solution.explanation)}</div>`
         : ''}
       ${solutionResultCardsHtml(game, question, players)}
     </div>`;
@@ -225,16 +312,18 @@ function solutionHtml(game, question, players) {
 function steppedSolutionHtml(game, question, players) {
   const solution = game.solution;
   const revealed = solution.answerRevealed === true;
+  const imageSrc = solutionPhotoSrc(solution, question);
+  const overlays = solutionOverlays(solution, question);
   return `
     <div class="percent-solution-stage stepped">
       <div class="percent-brand">WEIDMANN WM Poker Edition</div>
       <div class="percent-solution-title">Lösung · ${escapeHtml(question.label)}</div>
       <div class="percent-solution-photo-row">
         <div class="percent-photo-frame">
-          ${solution.imageSrc && question.imageExists
-            ? `<img src="${escapeHtml(solution.imageSrc)}" alt="" />`
+          ${imageSrc
+            ? `<img src="${escapeHtml(imageSrc)}" alt="" />`
             : diceSvg()}
-          ${(solution.revealedOverlays || []).map((overlay) => `
+          ${overlays.map((overlay) => `
             <div class="percent-photo-overlay" style="left:${Number(overlay.x) || 0}%;top:${Number(overlay.y) || 0}%;">
               ${(overlay.lines || []).map((line) => `<span>${escapeHtml(line)}</span>`).join('')}
             </div>
@@ -247,6 +336,26 @@ function steppedSolutionHtml(game, question, players) {
         : ''}
       ${revealed ? solutionResultCardsHtml(game, question, players) : ''}
     </div>`;
+}
+
+function solutionPhotoSrc(solution, question) {
+  if (solution && solution.imageSrc && solution.imageExists) return solution.imageSrc;
+  if (question && question.id === 'percent-1') return '/assets/games/prozentquiz/1-question.png';
+  return '';
+}
+
+function solutionOverlays(solution, question) {
+  const overlays = (solution && solution.revealedOverlays) || [];
+  if (!question || question.id !== 'percent-1') return overlays;
+  const percentOnePositions = {
+    'die-left': { x: 0, y: 70 },
+    'die-right': { x: 48, y: 85 },
+    eyes: { x: 43, y: 29 },
+  };
+  return overlays.map((overlay) => ({
+    ...overlay,
+    ...(percentOnePositions[overlay.id] || {}),
+  }));
 }
 
 function solutionResultCardsHtml(game, question, players) {
@@ -543,17 +652,22 @@ function injectPercentDisplayStyles() {
   style.textContent = `
     body.percent-mode footer.scores { display: none; }
     body.percent-mode main.stage {
-      min-height: 100vh;
-      padding: 18px;
+      min-height: 0;
+      padding: 14px 18px 16px;
       background:
         radial-gradient(circle at 50% 42%, rgba(255, 209, 92, .18), transparent 0 36%),
         linear-gradient(180deg, #18070d 0%, #080304 100%);
     }
+    body.percent-mode #content {
+      min-height: 0;
+    }
     .percent-display {
       width: min(1500px, 96vw);
-      height: min(900px, 94vh);
+      height: 100%;
+      max-height: 100%;
       display: grid;
       place-items: center;
+      min-height: 0;
     }
     .percent-idle,
     .percent-results,
@@ -681,12 +795,14 @@ function injectPercentDisplayStyles() {
       width: 100%;
       height: 100%;
       display: grid;
-      grid-template-rows: auto 1fr auto;
-      align-content: start;
-      gap: 16px;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      align-content: stretch;
+      gap: 12px;
+      min-height: 0;
+      overflow: hidden;
     }
     .percent-question-stage:has(.percent-panel-row + .percent-panel-row) {
-      grid-template-rows: auto auto 1fr auto;
+      grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr) auto;
     }
     .percent-stage-head {
       display: flex;
@@ -710,20 +826,38 @@ function injectPercentDisplayStyles() {
       background: linear-gradient(180deg, rgba(24,14,26,.94), rgba(8,4,8,.94));
       box-shadow: 0 18px 44px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.05);
       color: #fdfdff;
-      font-size: clamp(1.5rem, 2.7vw, 2.7rem);
+      font-size: 2.2rem;
       font-weight: 900;
-      line-height: 1.3;
+      line-height: 1.22;
       text-align: left;
-      padding: clamp(18px, 2.6vw, 34px);
+      padding: 22px 28px;
       animation: percentPartIn .35s ease-out both;
+      min-height: 0;
+      overflow: hidden;
     }
     .percent-text-panel.percent-text-wide { width: 100%; }
+    .percent-text-panel.percent-question-copy {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      font-size: 2.05rem;
+      line-height: 1.22;
+    }
     .percent-text-panel.percent-subquestion { align-self: center; }
+    .percent-media-row {
+      display: grid;
+      grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr);
+      gap: 12px;
+      align-items: stretch;
+      min-height: 0;
+      height: 100%;
+    }
     .percent-panel-row {
       display: grid;
       grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-      gap: 16px;
+      gap: 12px;
       align-items: stretch;
+      min-height: 0;
     }
     .percent-image-panel {
       display: grid;
@@ -734,19 +868,29 @@ function injectPercentDisplayStyles() {
       box-shadow: 0 18px 44px rgba(0,0,0,.5);
       padding: 12px;
       min-height: 0;
+      overflow: hidden;
       animation: percentPartIn .35s ease-out both;
     }
     .percent-image-panel svg {
       width: 100%;
       height: 100%;
-      max-height: 52vh;
+      max-height: 100%;
     }
-    .percent-diagram-panel svg { max-width: min(46vh, 520px); }
-    .percent-dice-panel svg { max-width: min(94vw, 980px); }
+    .percent-diagram-panel svg { max-width: min(100%, 620px); }
+    .percent-dice-panel svg { max-width: min(100%, 980px); }
     .percent-note-panel svg { max-width: 460px; }
+    .percent-note-panel img {
+      display: block;
+      width: 100%;
+      max-width: min(100%, 620px);
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 10px;
+    }
     .percent-photo-panel img {
       max-width: 100%;
-      max-height: 56vh;
+      max-height: 100%;
+      height: auto;
       object-fit: contain;
       border-radius: 10px;
       display: block;
@@ -797,16 +941,17 @@ function injectPercentDisplayStyles() {
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: center;
-      gap: 18px;
+      gap: 14px;
       border-radius: 14px;
       border: 2px solid rgba(255,209,92,.45);
       background: rgba(10,4,7,.85);
-      padding: 12px 22px;
+      padding: 9px 18px;
+      min-height: 70px;
     }
     .percent-timer.idle { grid-template-columns: 1fr; text-align: center; }
     .percent-timer-value {
       color: var(--accent);
-      font-size: clamp(2.4rem, 5vw, 4.6rem);
+      font-size: 3.6rem;
       font-weight: 900;
       line-height: 1;
       min-width: 2ch;
@@ -828,18 +973,219 @@ function injectPercentDisplayStyles() {
     }
     .percent-timer-locked {
       color: #ff7382;
-      font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+      font-size: 2rem;
       font-weight: 900;
     }
     .percent-timer-meta {
       color: var(--muted);
-      font-size: clamp(1rem, 1.7vw, 1.5rem);
+      font-size: 1.25rem;
       font-weight: 800;
       white-space: nowrap;
     }
 
     /* Lösung + Auswertung */
     .percent-solution-stage { animation: percentPartIn .32s ease-out both; }
+    .percent-solution-stage.with-image {
+      grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      align-content: stretch;
+      place-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .percent-solution-stage.with-image .percent-brand {
+      font-size: 2rem;
+      line-height: 1;
+    }
+    .percent-solution-stage.with-image .percent-solution-title {
+      font-size: 2.8rem;
+      line-height: 1;
+    }
+    .percent-solution-main-row {
+      width: min(1360px, 94vw);
+      height: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      align-items: center;
+      justify-items: center;
+    }
+    .percent-solution-image {
+      height: 100%;
+      max-width: 100%;
+      border-radius: 16px;
+      border: 3px solid rgba(255,209,92,.62);
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 18px 44px rgba(0,0,0,.5);
+    }
+    .percent-solution-image img {
+      display: block;
+      max-width: 100%;
+      height: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .percent-solution-stage.with-image .percent-solution-explain {
+      width: min(1120px, 92vw);
+      font-size: 1.55rem;
+      line-height: 1.18;
+    }
+    .percent-solution-stage.with-image .percent-results-grid {
+      width: min(1260px, 94vw);
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+    }
+    .percent-solution-stage.with-image .percent-result-card {
+      min-height: 118px;
+      gap: 4px;
+      padding: 10px 12px;
+    }
+    .percent-solution-stage.with-image .percent-result-name {
+      font-size: 1.25rem;
+    }
+    .percent-solution-stage.with-image .percent-result-answer {
+      font-size: 2.8rem;
+      line-height: 1;
+    }
+    .percent-solution-stage.with-image .percent-result-meta {
+      font-size: .95rem;
+      line-height: 1.15;
+    }
+    .percent-commissar-solution {
+      grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      align-content: stretch;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .percent-commissar-solution .percent-brand {
+      font-size: 1.9rem;
+      line-height: 1;
+    }
+    .percent-commissar-solution .percent-solution-title {
+      font-size: 2.6rem;
+      line-height: 1;
+    }
+    .percent-commissar-board {
+      width: min(1260px, 94vw);
+      height: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1.2fr) minmax(0, .8fr);
+      gap: 10px;
+    }
+    .percent-commissar-top,
+    .percent-commissar-bottom {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+    .percent-commissar-story,
+    .percent-commissar-question {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      font-size: 2rem;
+      line-height: 1.18;
+      padding: 18px 22px;
+    }
+    .percent-commissar-question {
+      justify-content: center;
+      text-align: center;
+    }
+    .percent-commissar-note-box {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 4px;
+      min-height: 0;
+      border-radius: 16px;
+      border: 3px solid rgba(255,209,92,.62);
+      background: rgba(6,3,5,.85);
+      box-shadow: 0 18px 44px rgba(0,0,0,.5);
+      padding: 10px;
+    }
+    .percent-commissar-note {
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .percent-commissar-note img,
+    .percent-commissar-note svg {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 10px;
+    }
+    .percent-bert-log {
+      color: #ffd15c;
+      font-size: 2.4rem;
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 0 0 22px rgba(255,209,92,.48);
+      letter-spacing: .06em;
+    }
+    .percent-commissar-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      align-content: center;
+      min-height: 0;
+    }
+    .percent-option-plate.correct {
+      border-color: #fff1ae;
+      background: linear-gradient(180deg, rgba(255,209,92,.32), rgba(15, 38, 27, .92));
+      box-shadow:
+        0 0 0 3px rgba(255,209,92,.35),
+        0 0 30px rgba(255,209,92,.28),
+        inset 0 0 0 1px rgba(255,255,255,.1);
+    }
+    .percent-option-plate.correct .percent-option-name {
+      color: #28e58b;
+      text-shadow: 0 0 18px rgba(40,229,139,.32);
+    }
+    .percent-commissar-explain {
+      font-size: 1.4rem;
+      line-height: 1.16;
+    }
+    .percent-commissar-solution .percent-results-grid {
+      width: min(1260px, 94vw);
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+    }
+    .percent-commissar-solution .percent-result-card {
+      min-height: 112px;
+      gap: 4px;
+      padding: 10px 12px;
+    }
+    .percent-commissar-solution .percent-result-name {
+      font-size: 1.2rem;
+    }
+    .percent-commissar-solution .percent-result-answer {
+      font-size: 2.6rem;
+      line-height: 1;
+    }
+    .percent-commissar-solution .percent-result-meta {
+      font-size: .92rem;
+      line-height: 1.15;
+    }
+    .percent-solution-stage.stepped {
+      grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      align-content: stretch;
+      place-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .percent-solution-stage.stepped .percent-brand {
+      font-size: 1.9rem;
+      line-height: 1;
+    }
+    .percent-solution-stage.stepped .percent-solution-title {
+      font-size: 2.7rem;
+      line-height: 1;
+    }
     .percent-solution-photo-row {
       width: min(1360px, 94vw);
       display: grid;
@@ -847,6 +1193,12 @@ function injectPercentDisplayStyles() {
       gap: 24px;
       align-items: center;
       justify-items: center;
+    }
+    .percent-solution-stage.stepped .percent-solution-photo-row {
+      width: min(1260px, 94vw);
+      height: 100%;
+      min-height: 0;
+      gap: 18px;
     }
     .percent-photo-frame {
       position: relative;
@@ -862,6 +1214,12 @@ function injectPercentDisplayStyles() {
       max-width: 100%;
       max-height: 62vh;
       object-fit: contain;
+    }
+    .percent-solution-stage.stepped .percent-photo-frame {
+      max-height: 100%;
+    }
+    .percent-solution-stage.stepped .percent-photo-frame img {
+      max-height: 52vh;
     }
     .percent-photo-frame svg {
       display: block;
@@ -889,6 +1247,9 @@ function injectPercentDisplayStyles() {
         2px 0 5px #000,
         -2px 0 5px #000,
         0 0 14px rgba(0,0,0,.95);
+    }
+    .percent-solution-stage.stepped .percent-photo-overlay span {
+      font-size: clamp(1rem, 1.8vw, 1.75rem);
     }
     .percent-answer-box {
       min-width: 180px;

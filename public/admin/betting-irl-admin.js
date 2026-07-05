@@ -16,8 +16,6 @@
     if (!state) return;
     if (state.phase === 'wetten') {
       renderIrlBettingAdmin(state);
-    } else if (state.phase === 'auswertung') {
-      renderWinnerPayoutAdmin(state);
     }
   });
 

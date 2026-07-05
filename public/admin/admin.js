@@ -261,39 +261,104 @@
   function renderAuswertung(state) {
     const round = state.round || {};
     const placements = round.placements || {};
-    const complete = state.players.every((p) => placements[p.id] != null);
+    const order = placementOrderFromState(state);
+    const complete = placementsComplete(state);
+    const payoutApplied = round.payoutApplied === true;
+    const nextPlace = order.length < state.players.length - 1 ? order.length + 2 : null;
     pickerArea.innerHTML =
       `<div class="lbl">Auswertung: ${round.selectedGame ? esc(round.selectedGame.title || round.selectedGame.name) : 'Spiel'}</div>` +
-      '<div class="muted" style="margin-bottom:8px;">Platzpunkte: 1.=50, 2.=40, 3.=30, 4.=20, 5.=10. Danach werden die geheimen Einsätze verrechnet.</div>' +
-      '<div class="spin-admin-list">' +
-      state.players.map((p) => placementRow(p, placements[p.id])).join('') +
-      '</div>' +
+      '<div class="muted" style="margin-bottom:8px;">Klicke die Spieler in der Reihenfolge für Platz 2, 3, 4, 5. Der übrige Spieler wird automatisch Platz 1. Platzpunkte und Wetten werden zusammen berechnet.</div>' +
+      placementSequenceHtml(state, placements, order, nextPlace, payoutApplied) +
+      payoutPreviewHtml(state, placements, complete, payoutApplied) +
       '<div class="row" style="margin-top:10px;">' +
-      `<button class="good" ${complete && !round.payoutApplied ? '' : 'disabled'} data-apply-payouts>Auszahlung anwenden</button>` +
+      `<button class="good" ${complete && !payoutApplied ? '' : 'disabled'} data-apply-payouts>Auswertung anwenden</button>` +
+      `<button ${payoutApplied ? 'disabled' : ''} data-reset-placement-order>Reihenfolge leeren</button>` +
       '</div>' +
       payoutSummaryHtml(state);
 
-    pickerArea.querySelectorAll('[data-place]').forEach((btn) => {
-      btn.onclick = () =>
-        App.socket.emit('admin:set-placement', {
-          playerId: btn.dataset.player,
-          place: Number(btn.dataset.place),
-        });
+    pickerArea.querySelectorAll('[data-rank-player]').forEach((button) => {
+      button.onclick = () => {
+        if (payoutApplied) return;
+        const playerId = button.dataset.rankPlayer;
+        const current = placementOrderFromState(App.getState() || state).map((row) => row.player.id);
+        const selectedIndex = current.indexOf(playerId);
+        const next = selectedIndex >= 0
+          ? current.filter((id) => id !== playerId)
+          : current.length < state.players.length - 1
+            ? [...current, playerId]
+            : current;
+        App.socket.emit('admin:set-placement-order', { playerIds: next });
+      };
     });
+
+    const reset = pickerArea.querySelector('[data-reset-placement-order]');
+    if (reset) reset.onclick = () => App.socket.emit('admin:set-placement-order', { playerIds: [] });
     const apply = pickerArea.querySelector('[data-apply-payouts]');
     if (apply) apply.onclick = () => App.socket.emit('admin:apply-payouts');
   }
 
-  function placementRow(player, place) {
+  function placementSequenceHtml(state, placements, order, nextPlace, payoutApplied) {
+    const automaticWinner = winnerFromPlacements(state, placements);
     return `
-      <div class="game-detail mini">
-        <div><b style="color:${player.color}">${esc(player.name)}</b> ${place ? `&middot; ${place}. Platz (${placeAward(place)} Coins)` : '&middot; noch offen'}</div>
-        <div class="row" style="margin-top:6px;">
-          ${[1, 2, 3, 4, 5].map((n) =>
-            `<button class="${place === n ? 'primary' : ''}" data-player="${player.id}" data-place="${n}">${n}</button>`
-          ).join('')}
+      <div class="game-detail placement-sequence">
+        <b>Reihenfolge</b>
+        <div class="placement-slots">
+          <div class="placement-slot ${automaticWinner ? 'filled winner' : ''}">
+            <span>1. Platz</span>
+            <b>${automaticWinner ? esc(automaticWinner.name) : 'automatisch'}</b>
+          </div>
+          ${[2, 3, 4, 5].map((place) => {
+            const row = order.find((entry) => entry.place === place);
+            return `
+              <div class="placement-slot ${row ? 'filled' : ''}">
+                <span>${place}. Platz</span>
+                <b>${row ? esc(row.player.name) : '-'}</b>
+              </div>`;
+          }).join('')}
+        </div>
+        <div class="muted" style="margin-top:8px;">${nextPlace ? `Nächster Klick setzt Platz ${nextPlace}.` : 'Reihenfolge vollständig.'}</div>
+        <div class="placement-pick-grid">
+          ${state.players.map((player) => placementPickButton(player, placements[player.id], nextPlace, payoutApplied)).join('')}
         </div>
       </div>`;
+  }
+
+  function placementPickButton(player, place, nextPlace, payoutApplied) {
+    const selected = place >= 2;
+    const winner = place === 1;
+    const disabled = payoutApplied || (winner && !nextPlace) || (!selected && !nextPlace);
+    const note = winner
+      ? 'automatisch 1. Platz'
+      : selected
+        ? `${place}. Platz · erneut klicken zum Entfernen`
+        : nextPlace
+          ? `als ${nextPlace}. Platz setzen`
+          : 'Reihenfolge voll';
+    return `
+      <button class="placement-pick ${selected ? 'selected' : ''} ${winner ? 'winner' : ''}"
+        style="--pc:${player.color}" data-rank-player="${player.id}" ${disabled ? 'disabled' : ''}>
+        <b>${esc(player.name)}</b>
+        <span>${esc(note)}</span>
+      </button>`;
+  }
+
+  function payoutPreviewHtml(state, placements, complete, payoutApplied) {
+    if (payoutApplied) return '';
+    if (!complete) {
+      return '<div class="game-detail mini" style="margin-top:10px;"><b>Berechnung</b><div class="muted">Sobald Platz 2 bis 5 gesetzt sind, wird Platz 1 automatisch ergänzt und die Auszahlung berechnet.</div></div>';
+    }
+
+    return '<div class="game-detail" style="margin-top:10px;"><b>Vorschau: Platzierung + Wette</b>' +
+      payoutRows(state, placements)
+        .sort((a, b) => a.place - b.place)
+        .map((row) => `
+          <div class="placement-payout-row">
+            <b>${row.place}. ${esc(row.playerName)}</b>
+            <span>+${row.award} Platz ${row.betAmount ? `${row.betDelta >= 0 ? '+' : ''}${row.betDelta} Wette auf ${esc(row.betTargetName || '-')}` : '+0 Wette'}</span>
+            <strong>${row.currentScore} → ${row.finalScore} Coins</strong>
+          </div>`)
+        .join('') +
+      '</div>';
   }
 
   function payoutSummaryHtml(state) {
@@ -311,6 +376,57 @@
           </div>`)
         .join('') +
       '</div>';
+  }
+
+  function placementOrderFromState(state) {
+    const placements = (state.round && state.round.placements) || {};
+    return state.players
+      .map((player) => ({
+        player,
+        place: Number(placements[player.id]) || null,
+      }))
+      .filter((row) => row.place >= 2)
+      .sort((a, b) => a.place - b.place);
+  }
+
+  function winnerFromPlacements(state, placements) {
+    return state.players.find((player) => Number(placements[player.id]) === 1) || null;
+  }
+
+  function placementsComplete(state) {
+    const placements = (state.round && state.round.placements) || {};
+    const places = state.players.map((player) => Number(placements[player.id]) || 0);
+    return state.players.length === 5 && [1, 2, 3, 4, 5].every((place) => places.includes(place));
+  }
+
+  function payoutRows(state, placements) {
+    const winner = winnerFromPlacements(state, placements);
+    const winnerId = winner ? winner.id : null;
+    const bets = (state.round && state.round.bets) || {};
+    return state.players.map((player) => {
+      const place = Number(placements[player.id]) || 0;
+      const award = placeAward(place);
+      const bet = bets[player.id] || {};
+      const amount = Math.max(0, Math.round(Number(bet.amount) || 0));
+      const target = bet.targetPlayerId ? state.players.find((entry) => entry.id === bet.targetPlayerId) : null;
+      const betWon = amount > 0 && bet.targetPlayerId === winnerId;
+      const betDelta = amount > 0 ? (betWon ? amount : -amount) : 0;
+      const currentScore = Number(player.score) || 0;
+      return {
+        playerId: player.id,
+        playerName: player.name,
+        place,
+        award,
+        betTargetPlayerId: bet.targetPlayerId || null,
+        betTargetName: target ? target.name : null,
+        betAmount: amount,
+        betWon,
+        betDelta,
+        totalDelta: award + betDelta,
+        currentScore,
+        finalScore: currentScore + award + betDelta,
+      };
+    });
   }
 
   function choicesHtml(choices) {
@@ -702,6 +818,10 @@
     }).length;
     const revealed = ['reveal', 'result'].includes(game.phase);
     const winnerText = halbeWinnerText(game);
+    const timerRunning = halbeTimerRunning(game);
+    const timerRemaining = timerRunning
+      ? Math.max(0, Math.ceil(((Number(game.timer.endsAt) || 0) - Date.now()) / 1000))
+      : 0;
 
     return `
       <div class="game-detail halbe-admin" style="margin-top:10px;">
@@ -711,6 +831,7 @@
         ${game.adminWarning ? `<div style="margin-top:8px;color:#ffd15c;font-weight:900;">${esc(game.adminWarning)}</div>` : ''}
         <label class="admin-field-label" for="halbe-item">Gegenstand oder Runde</label>
         <input id="halbe-item" class="admin-text-input" type="text" value="${esc(game.itemName)}" maxlength="80" data-halbe-item />
+        ${halbeTimerControlsHtml(game, timerRunning, timerRemaining)}
         <div class="spin-admin-list" style="margin-top:10px;">
           ${state.players.map((player) => halbePlayerAdminRow(player, game)).join('')}
         </div>
@@ -777,11 +898,16 @@
     });
 
     activeGameEl.querySelectorAll('[data-halbe-action]').forEach((button) => {
-      button.onclick = () =>
-        App.socket.emit('game:action', {
+      button.onclick = () => {
+        const payload = {
           type: `halbe:${button.dataset.halbeAction}`,
-        });
+        };
+        if (button.dataset.halbeAction === 'start-timer') payload.seconds = 30;
+        App.socket.emit('game:action', payload);
+      };
     });
+
+    startHalbeAdminTimerUi();
   }
 
   function halbeSachenState(state) {
@@ -795,8 +921,54 @@
       totals: raw.totals && typeof raw.totals === 'object' ? raw.totals : {},
       scoredRounds: Number(raw.scoredRounds) || 0,
       resultConfirmed: raw.resultConfirmed === true,
+      timer: raw.timer && typeof raw.timer === 'object' ? raw.timer : {},
       adminWarning: String(raw.adminWarning || ''),
     };
+  }
+
+  function halbeTimerControlsHtml(game, timerRunning, timerRemaining) {
+    const expired = game.timer && game.timer.running === true && Number(game.timer.endsAt) && !timerRunning;
+    return `
+      <div class="row" style="margin-top:10px;">
+        <button class="primary" data-halbe-action="start-timer" ${timerRunning ? 'disabled' : ''}>Timer starten (30 Sekunden)</button>
+        <button class="bad" data-halbe-action="stop-timer" ${timerRunning || expired ? '' : 'disabled'}>Timer stoppen</button>
+        ${timerRunning || expired
+          ? `<span style="font-weight:900;color:var(--accent);" data-halbe-admin-timer data-ends-at="${Number(game.timer.endsAt) || 0}">
+              ${timerRunning ? `${timerRemaining}s` : 'abgelaufen'}
+            </span>`
+          : ''}
+      </div>`;
+  }
+
+  function startHalbeAdminTimerUi() {
+    if (window.__halbeAdminTimerInterval) {
+      clearInterval(window.__halbeAdminTimerInterval);
+      window.__halbeAdminTimerInterval = null;
+    }
+
+    const timerEl = activeGameEl.querySelector('[data-halbe-admin-timer]');
+    if (!timerEl) return;
+
+    const endsAt = Number(timerEl.dataset.endsAt) || 0;
+    window.__halbeAdminTimerInterval = setInterval(() => {
+      if (!document.body.contains(timerEl)) {
+        clearInterval(window.__halbeAdminTimerInterval);
+        window.__halbeAdminTimerInterval = null;
+        return;
+      }
+
+      const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      timerEl.textContent = remaining > 0 ? `${remaining}s` : 'abgelaufen';
+      const startButton = activeGameEl.querySelector('[data-halbe-action="start-timer"]');
+      const stopButton = activeGameEl.querySelector('[data-halbe-action="stop-timer"]');
+      if (startButton) startButton.toggleAttribute('disabled', remaining > 0);
+      if (stopButton) stopButton.toggleAttribute('disabled', false);
+    }, 250);
+  }
+
+  function halbeTimerRunning(game) {
+    const timer = game.timer && typeof game.timer === 'object' ? game.timer : {};
+    return timer.running === true && Number(timer.endsAt) > Date.now();
   }
 
   function halbeTotalsAdmin(players, game) {
@@ -970,7 +1142,7 @@
       <div class="game-detail mini percent-selected-admin" style="margin-top:10px;">
         <b>${esc(question.adminTitle || question.label)}</b>
         <div class="muted">${percentAnswerTypeLabel(question)} · x${percentFormatMultiplier(question.multiplier)} · ${answered}/${eligible.length} Antworten (nur Spieler mit Einsatz auf diese Frage)</div>
-        ${question.imageSrc && !question.imageExists
+        ${percentShowMissingImageWarning(question)
           ? `<div style="margin-top:6px;color:#ffd15c;font-weight:900;">Foto fehlt: ${esc(question.imageSrc)} – solange wird die Zeichnung angezeigt.</div>`
           : ''}
         <div class="row" style="margin-top:10px;">
@@ -989,6 +1161,11 @@
           ${players.map((player) => percentAnswerAdminRow(player, answers[player.id], question, game, payouts[player.id])).join('')}
         </div>
       </div>`;
+  }
+
+  function percentShowMissingImageWarning(question) {
+    if (!question || !question.imageSrc || question.imageExists) return false;
+    return question.id !== 'percent-1';
   }
 
   function percentSolutionControls(question, game, solutionShown) {
@@ -1512,7 +1689,9 @@
       button.onclick = () => {
         const action = button.dataset.percentAction;
         if (button.dataset.percentConfirmOpen === '1' && !confirm('Antworten sind noch offen. Lösung trotzdem anzeigen?')) return;
-        App.socket.emit('game:action', { type: `percent:${action}` });
+        const payload = { type: `percent:${action}` };
+        if (action === 'start-timer') payload.seconds = 30;
+        App.socket.emit('game:action', payload);
       };
     });
 

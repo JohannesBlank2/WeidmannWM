@@ -1,9 +1,14 @@
+let halbeDisplayTimerInterval = null;
+let halbeDisplayTimerHideTimeout = null;
+
 GameRegistry.register('schneid-in-die-haelfte', {
   mount(container) {
     injectStyles();
     document.body.classList.add('halbe-mode');
     if (window.__setGameMounted) window.__setGameMounted(true);
-    container.innerHTML = '<div class="halbe-display" id="halbe-display"></div>';
+    container.innerHTML = `
+      <div class="halbe-display" id="halbe-display"></div>
+      <div class="halbe-timer-popover" id="halbe-timer-popover" aria-live="polite" aria-hidden="true"></div>`;
   },
 
   update(state) {
@@ -16,6 +21,7 @@ GameRegistry.register('schneid-in-die-haelfte', {
         <div class="halbe-hidden">
           ${totalsBoard(state, game, true)}
         </div>`;
+      syncTimerOverlay(game);
       return;
     }
 
@@ -28,16 +34,20 @@ GameRegistry.register('schneid-in-die-haelfte', {
             <div class="halbe-kicker">Halbe Sachen · ${escapeHtml(game.itemName)}</div>
             <div class="halbe-title">Auflösung</div>
           </div>
-          <div class="halbe-best">${bestText(game)}</div>
+          <div class="halbe-head-metrics">
+            <div class="halbe-best">${bestText(game)}</div>
+          </div>
         </div>
         <div class="halbe-scale-grid">
           ${state.players.map((player) => scaleCard(player, game, winners.has(player.id))).join('')}
         </div>
         ${totalsBoard(state, game, false)}
       </div>`;
+    syncTimerOverlay(game);
   },
 
   unmount(container) {
+    hideTimerOverlay();
     document.body.classList.remove('halbe-mode');
     if (window.__setGameMounted) window.__setGameMounted(false);
     container.innerHTML = '';
@@ -108,6 +118,85 @@ function bestText(game) {
   return `${escapeHtml(winners)} · ${formatGram(best && best.difference)}`;
 }
 
+function syncTimerOverlay(game) {
+  const timer = game.timer || {};
+  const endsAt = Number(timer.endsAt) || 0;
+  if (!timer.running || !endsAt) {
+    hideTimerOverlay();
+    return;
+  }
+
+  const popover = document.getElementById('halbe-timer-popover');
+  if (!popover) return;
+
+  showTimerOverlay(popover, endsAt, Number(timer.durationSeconds) || 30);
+}
+
+function showTimerOverlay(popover, endsAt, durationSeconds) {
+  clearTimerHandles();
+
+  const totalMs = Math.max(1000, Number(durationSeconds) * 1000);
+  popover.innerHTML = `
+    <div class="halbe-timer-ring">
+      <div class="halbe-timer-core">
+        <span>Timer</span>
+        <strong data-halbe-timer-value>30</strong>
+        <small>Sekunden</small>
+      </div>
+    </div>`;
+  popover.classList.add('visible');
+  popover.classList.remove('done', 'urgent');
+  popover.setAttribute('aria-hidden', 'false');
+
+  const valueEl = popover.querySelector('[data-halbe-timer-value]');
+  const update = () => {
+    const remaining = Math.max(0, endsAt - Date.now());
+    const seconds = Math.ceil(remaining / 1000);
+    const progress = Math.max(0, Math.min(1, remaining / totalMs));
+
+    popover.style.setProperty('--timer-progress', `${progress * 360}deg`);
+    popover.classList.toggle('urgent', remaining > 0 && remaining <= 5000);
+
+    if (valueEl) valueEl.textContent = String(seconds);
+
+    if (remaining <= 0) {
+      popover.classList.add('done');
+      popover.classList.remove('urgent');
+      const label = popover.querySelector('span');
+      const unit = popover.querySelector('small');
+      if (label) label.textContent = 'Zeit!';
+      if (unit) unit.textContent = 'abgelaufen';
+      clearTimerHandles();
+      halbeDisplayTimerHideTimeout = window.setTimeout(hideTimerOverlay, 1200);
+    }
+  };
+
+  update();
+  halbeDisplayTimerInterval = window.setInterval(update, 200);
+}
+
+function hideTimerOverlay() {
+  clearTimerHandles();
+  const popover = document.getElementById('halbe-timer-popover');
+  if (!popover) return;
+
+  popover.classList.remove('visible', 'done', 'urgent');
+  popover.setAttribute('aria-hidden', 'true');
+  popover.innerHTML = '';
+  popover.style.removeProperty('--timer-progress');
+}
+
+function clearTimerHandles() {
+  if (halbeDisplayTimerInterval) {
+    clearInterval(halbeDisplayTimerInterval);
+    halbeDisplayTimerInterval = null;
+  }
+  if (halbeDisplayTimerHideTimeout) {
+    clearTimeout(halbeDisplayTimerHideTimeout);
+    halbeDisplayTimerHideTimeout = null;
+  }
+}
+
 function ensureGameState(state) {
   const raw = state.gameState && typeof state.gameState === 'object' ? state.gameState : {};
   return {
@@ -118,6 +207,17 @@ function ensureGameState(state) {
     totals: raw.totals && typeof raw.totals === 'object' ? raw.totals : {},
     scoredRounds: Number(raw.scoredRounds) || 0,
     resultConfirmed: raw.resultConfirmed === true,
+    timer: normalizeTimer(raw.timer),
+  };
+}
+
+function normalizeTimer(value) {
+  const raw = value && typeof value === 'object' ? value : {};
+  const endsAt = Number(raw.endsAt) || null;
+  return {
+    running: raw.running === true && !!endsAt && endsAt > Date.now(),
+    endsAt,
+    durationSeconds: Math.max(1, Number(raw.durationSeconds) || 30),
   };
 }
 
@@ -168,6 +268,12 @@ function injectStyles() {
       gap: 18px;
       padding: 0 8px;
     }
+    .halbe-head-metrics {
+      display: grid;
+      gap: 10px;
+      justify-items: end;
+      max-width: 46%;
+    }
     .halbe-kicker {
       color: var(--muted);
       font-size: clamp(1rem, 1.5vw, 1.3rem);
@@ -191,7 +297,103 @@ function injectStyles() {
       font-weight: 900;
       font-size: clamp(1rem, 1.7vw, 1.55rem);
       text-align: right;
-      max-width: 44%;
+      max-width: 100%;
+    }
+    .halbe-timer-popover {
+      --timer-progress: 360deg;
+      position: fixed;
+      top: clamp(74px, 8vh, 112px);
+      right: clamp(18px, 3vw, 44px);
+      width: clamp(126px, 13vw, 188px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      z-index: 1200;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(.72) translateY(-10px);
+      transition: opacity .18s ease, transform .24s ease;
+    }
+    .halbe-timer-popover.visible {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      animation: halbe-timer-pop .28s ease both;
+    }
+    .halbe-timer-ring {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      padding: 8px;
+      background:
+        conic-gradient(from -90deg, var(--accent) var(--timer-progress), rgba(255,248,223,.16) 0deg),
+        radial-gradient(circle at 35% 25%, rgba(255,255,255,.2), transparent 42%),
+        #201007;
+      box-shadow: 0 12px 42px rgba(0,0,0,.52), 0 0 34px rgba(255,209,92,.28);
+    }
+    .halbe-timer-core {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 2px;
+      border: 1px solid rgba(255,237,171,.36);
+      background: radial-gradient(circle at 50% 35%, #2b1609, #090403 72%);
+      box-shadow: inset 0 0 28px rgba(0,0,0,.68);
+      text-align: center;
+    }
+    .halbe-timer-core span,
+    .halbe-timer-core small {
+      display: block;
+      color: var(--muted);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+    }
+    .halbe-timer-core span {
+      font-size: clamp(.72rem, 1vw, .95rem);
+    }
+    .halbe-timer-core strong {
+      display: block;
+      color: #fff8df;
+      font-size: clamp(3.15rem, 6vw, 5.7rem);
+      line-height: .85;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 24px rgba(255,209,92,.42);
+    }
+    .halbe-timer-core small {
+      font-size: clamp(.62rem, .8vw, .78rem);
+    }
+    .halbe-timer-popover.urgent .halbe-timer-ring {
+      background:
+        conic-gradient(from -90deg, #ff6a7d var(--timer-progress), rgba(255,248,223,.16) 0deg),
+        radial-gradient(circle at 35% 25%, rgba(255,255,255,.2), transparent 42%),
+        #25070d;
+      box-shadow: 0 12px 42px rgba(0,0,0,.52), 0 0 36px rgba(255,106,125,.36);
+    }
+    .halbe-timer-popover.urgent .halbe-timer-core strong,
+    .halbe-timer-popover.done .halbe-timer-core strong,
+    .halbe-timer-popover.done .halbe-timer-core span {
+      color: #ff8a9a;
+    }
+    .halbe-timer-popover.done .halbe-timer-ring {
+      background:
+        conic-gradient(from -90deg, #ff6a7d 360deg, rgba(255,248,223,.16) 0deg),
+        radial-gradient(circle at 35% 25%, rgba(255,255,255,.2), transparent 42%),
+        #25070d;
+      animation: halbe-timer-done .55s ease both;
+    }
+    @keyframes halbe-timer-pop {
+      0% { transform: scale(.68) translateY(-12px); }
+      70% { transform: scale(1.08) translateY(0); }
+      100% { transform: scale(1) translateY(0); }
+    }
+    @keyframes halbe-timer-done {
+      0%, 100% { transform: scale(1); }
+      45% { transform: scale(1.08); }
     }
     .halbe-scale-grid {
       min-height: 0;
@@ -398,7 +600,7 @@ function injectStyles() {
     @media (max-width: 1150px) {
       .halbe-scale-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: auto; }
       .halbe-totals-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .halbe-best { max-width: 52%; }
+      .halbe-head-metrics { max-width: 52%; }
     }
   `;
   document.head.appendChild(style);

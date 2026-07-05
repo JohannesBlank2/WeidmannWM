@@ -198,6 +198,8 @@ function attachSockets(io, gameState, registry) {
 
     socket.on('admin:set-placement', ({ playerId, place } = {}) =>
       gameState.setPlacement(playerId, place));
+    socket.on('admin:set-placement-order', ({ playerIds } = {}) =>
+      gameState.setPlacementOrder(playerIds));
     socket.on('admin:clear-placement', ({ playerId } = {}) =>
       gameState.clearPlacement(playerId));
     socket.on('admin:apply-payouts', () => gameState.applyPayouts());
