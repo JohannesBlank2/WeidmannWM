@@ -187,6 +187,15 @@ function attachSockets(io, gameState, registry) {
       gameState.setAmbientMusic(patch);
     });
 
+    // Winner-Sound: Admin steuert, das Display spielt ab.
+    socket.on('admin:winner-sound', ({ playing } = {}) => {
+      if (socket.data.role !== 'admin') return;
+      io.emit('fx:winner-sound', { playing: !!playing });
+    });
+    socket.on('display:winner-sound-ended', () => {
+      io.emit('fx:winner-sound', { playing: false });
+    });
+
     socket.on('admin:set-placement', ({ playerId, place } = {}) =>
       gameState.setPlacement(playerId, place));
     socket.on('admin:clear-placement', ({ playerId } = {}) =>

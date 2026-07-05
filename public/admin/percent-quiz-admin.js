@@ -29,10 +29,10 @@
       root.innerHTML = `
         <div class="percent-start-panel">
           <div class="percent-start-status">
-            <b>Das Prozent-Quiz (1%-Quiz)</b>
+            <b>Das 1% Quiz (Bonusspiel)</b>
             <span>${otherGame
               ? `Achtung: „${esc(otherGame.title || otherGame.name)}" läuft noch und wird beim Start ersetzt.`
-              : 'Bonusspiel mit Videoclips, Einsätzen und Handy-Antworten.'}</span>
+              : 'Nachgebaute Fragen (25% / 10% / 1%), Timer und Handy-Antworten. Auszahlung automatisch.'}</span>
           </div>
           <button class="good" data-percent-start>▶ Bonusspiel starten</button>
         </div>`;

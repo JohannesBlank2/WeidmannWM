@@ -56,7 +56,7 @@ const CRASH_DEFAULT_SETTINGS = {
   maxCrashPoint: CRASH_MAX_POINT / 100,
   growthSpeed: 1,
 };
-const AMBIENT_TRACK_IDS = ['pick-your-poison', 'hide', 'blind-spot', 'poker-ambiente'];
+const AMBIENT_TRACK_IDS = ['hide', 'pick-your-poison', 'blind-spot', 'poker-ambiente'];
 const DEFAULT_AMBIENT_MUSIC = {
   enabled: false,
   trackId: AMBIENT_TRACK_IDS[0],

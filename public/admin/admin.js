@@ -22,9 +22,9 @@
     { slot: 5, gameId: 'einkauf-schaetzen', title: 'How much is the fish', defaultTitle: 'How much is the fish', animation: 'scratch' },
   ];
   const AMBIENT_TRACKS = [
-    { id: 'pick-your-poison', label: 'Pick Your Poison', file: 'pick-your-poison.mp3' },
-    { id: 'hide', label: 'Hide', file: 'hide.mp3' },
-    { id: 'blind-spot', label: 'Blind Spot', file: 'blind-spot.mp3' },
+    { id: 'hide', label: 'Sehr spannend', file: 'hide.mp3' },
+    { id: 'pick-your-poison', label: 'Mittel', file: 'pick-your-poison.mp3' },
+    { id: 'blind-spot', label: 'Chill', file: 'blind-spot.mp3' },
     { id: 'poker-ambiente', label: 'Poker Ambiente (Finale)', file: 'poker-ambiente.mp3' },
   ];
 
@@ -55,27 +55,17 @@
   });
 
   if (winnerSoundBtn) {
-    const winnerAudio = new Audio('/assets/audio/winner.mp3');
-    winnerAudio.preload = 'auto';
-    winnerAudio.addEventListener('ended', () => {
-      winnerSoundBtn.textContent = '▶ Winner Sound abspielen';
-      winnerSoundBtn.classList.remove('bad');
-      winnerSoundBtn.classList.add('good');
-    });
+    // Der Sound läuft auf dem Display; die Konsole sendet nur Steuer-Events.
+    let winnerPlaying = false;
+    const setWinnerBtn = (playing) => {
+      winnerPlaying = playing;
+      winnerSoundBtn.textContent = playing ? '■ Winner Sound stoppen' : '▶ Winner Sound abspielen';
+      winnerSoundBtn.classList.toggle('bad', playing);
+      winnerSoundBtn.classList.toggle('good', !playing);
+    };
+    App.socket.on('fx:winner-sound', ({ playing } = {}) => setWinnerBtn(!!playing));
     winnerSoundBtn.onclick = () => {
-      if (winnerAudio.paused) {
-        winnerAudio.currentTime = 0;
-        winnerAudio.play().catch(() => {});
-        winnerSoundBtn.textContent = '■ Winner Sound stoppen';
-        winnerSoundBtn.classList.remove('good');
-        winnerSoundBtn.classList.add('bad');
-      } else {
-        winnerAudio.pause();
-        winnerAudio.currentTime = 0;
-        winnerSoundBtn.textContent = '▶ Winner Sound abspielen';
-        winnerSoundBtn.classList.remove('bad');
-        winnerSoundBtn.classList.add('good');
-      }
+      App.socket.emit('admin:winner-sound', { playing: !winnerPlaying });
     };
   }
 
@@ -950,72 +940,96 @@
 
     return `
       <div class="game-detail percent-admin" style="margin-top:10px;">
-        <b>Das Prozent-Quiz</b>
+        <b>Das 1% Quiz</b>
         <div class="muted">Status: ${percentPhaseLabel(game.phase)} · Antworten ${game.answersOpen ? 'offen' : 'geschlossen'}</div>
         ${game.adminWarning ? `<div style="margin-top:8px;color:#ffd15c;font-weight:900;">${esc(game.adminWarning)}</div>` : ''}
         ${percentBettingAdmin(game, state.players)}
-        ${selected ? percentSelectedAdmin(selected, game, state.players, answers) : '<div class="muted" style="margin-top:8px;">Keine Frage ausgewählt.</div>'}
         <div class="percent-question-list">
           ${game.questions.map((question) => percentQuestionAdminButton(question, game.selectedQuestionId)).join('')}
         </div>
+        ${selected ? percentSelectedAdmin(selected, game, state.players, answers) : '<div class="muted" style="margin-top:8px;">Keine Frage ausgewählt.</div>'}
       </div>`;
   }
 
   function percentSelectedAdmin(question, game, players, answers) {
-    const answered = players.filter((player) => answers[player.id]).length;
+    const eligible = players.filter((player) => {
+      const entry = game.betsByPlayerId[player.id];
+      return entry && entry.questionId === question.id && entry.amount > 0;
+    });
+    const answered = eligible.filter((player) => answers[player.id]).length;
     const payouts = percentPayoutsFor(game, question.id);
+    const totalSteps = (question.revealSteps || []).length;
+    const nextStepLabel = game.revealStep < totalSteps ? question.revealSteps[game.revealStep] : null;
+    const solutionShown = game.solutionVisible && game.solution && game.solution.questionId === question.id;
+    const timerRunning = game.timer && game.timer.running === true;
+    const timerRemaining = timerRunning
+      ? Math.max(0, Math.ceil(((Number(game.timer.endsAt) || 0) - Date.now()) / 1000))
+      : 0;
+
     return `
-      <div class="game-detail mini percent-selected-admin">
-        <div>
-          <b>${esc(question.label)}</b>
-          <div class="muted">${percentAnswerTypeLabel(question)} · Clip: ${esc(question.clipSrc)} · Original: ${esc(question.originalStart)}-${esc(question.originalEnd)}</div>
-          ${question.clipExists ? '' : `<div style="margin-top:6px;color:#ffd15c;font-weight:900;">Clip-Datei fehlt: ${esc(question.clipSrc)}</div>`}
-          <div class="muted">${answered}/${players.length} Spieler haben eingeloggt.</div>
+      <div class="game-detail mini percent-selected-admin" style="margin-top:10px;">
+        <b>${esc(question.adminTitle || question.label)}</b>
+        <div class="muted">${percentAnswerTypeLabel(question)} · x${percentFormatMultiplier(question.multiplier)} · ${answered}/${eligible.length} Antworten (nur Spieler mit Einsatz auf diese Frage)</div>
+        ${question.imageSrc && !question.imageExists
+          ? `<div style="margin-top:6px;color:#ffd15c;font-weight:900;">Foto fehlt: ${esc(question.imageSrc)} – solange wird die Zeichnung angezeigt.</div>`
+          : ''}
+        <div class="row" style="margin-top:10px;">
+          <button class="primary" data-percent-action="reveal-step" ${nextStepLabel ? '' : 'disabled'}>
+            ${nextStepLabel ? `Aufdecken: ${esc(nextStepLabel)} (${game.revealStep + 1}/${totalSteps})` : 'Alles aufgedeckt'}
+          </button>
+          <button data-percent-action="unreveal-step" ${game.revealStep > 0 ? '' : 'disabled'}>Schritt zurück</button>
         </div>
         <div class="row" style="margin-top:10px;">
-          <button class="good" data-percent-action="start-clip">Clip starten</button>
-          <button data-percent-action="pause-clip">Clip pausieren</button>
-          <button data-percent-action="restart-clip">Clip von vorne starten</button>
-          <button class="${game.answersOpen ? '' : 'primary'}" data-percent-action="open-answers">Antworten öffnen</button>
-          <button data-percent-action="close-answers">Antworten schließen</button>
-          <button data-percent-action="reset-answers">Antworten zurücksetzen</button>
-          <button class="primary" data-percent-action="show-results">Auswertung anzeigen</button>
-          <button data-percent-action="back-to-selection">Zurück zur Frageauswahl</button>
+          <button class="good" data-percent-action="start-timer" ${timerRunning ? 'disabled' : ''}>▶ Timer starten (30 Sek., Antworten auf)</button>
+          <button class="bad" data-percent-action="stop-timer" ${timerRunning ? '' : 'disabled'}>■ Timer stoppen</button>
+          ${timerRunning ? `<span style="font-weight:900;color:var(--accent);" data-percent-admin-timer data-ends-at="${Number(game.timer.endsAt) || 0}">${timerRemaining}s</span>` : ''}
         </div>
-        ${percentSolutionAdmin(question, game)}
+        ${percentSolutionControls(question, game, solutionShown)}
         <div class="spin-admin-list" style="margin-top:10px;">
           ${players.map((player) => percentAnswerAdminRow(player, answers[player.id], question, game, payouts[player.id])).join('')}
         </div>
       </div>`;
   }
 
-  function percentSolutionAdmin(question, game) {
-    const visible = game.solutionVisible && game.solutionShownForQuestionId === question.id;
-    const status = question.solutionExists
-      ? visible
-        ? 'Lösung wird angezeigt'
-        : 'Lösung nicht sichtbar'
-      : 'Screenshot fehlt';
+  function percentSolutionControls(question, game, solutionShown) {
+    const overlayLabels = question.solutionStepLabels || [];
+    const total = overlayLabels.length ? overlayLabels.length + 1 : 0;
+    const showLabel = overlayLabels.length
+      ? 'Lösung anzeigen (dann einzeln aufdecken)'
+      : 'Lösung anzeigen + auto. auszahlen';
+
+    let stepButtons = '';
+    if (solutionShown && total) {
+      const step = Number(game.solutionStep) || 0;
+      const nextLabel = step < overlayLabels.length
+        ? `Aufdecken: ${esc(overlayLabels[step])} (${step + 1}/${total})`
+        : step < total
+          ? `Ergebnis anzeigen + auszahlen (${total}/${total})`
+          : 'Alles aufgedeckt';
+      stepButtons = `
+        <button class="primary" data-percent-action="solution-step" ${step >= total ? 'disabled' : ''}>${nextLabel}</button>
+        <button data-percent-action="solution-unstep" ${step > 0 ? '' : 'disabled'}>Einblendung zurück</button>`;
+    }
+
     return `
-      <div class="game-detail mini percent-solution-admin" style="margin-top:10px;">
-        <b>Lösung</b>
-        <div class="muted">Aktuelle Frage: ${esc(question.label)}</div>
-        <div class="muted">Screenshot: ${esc(question.solutionImageSrc || '-')}</div>
-        <div class="muted">Status: ${esc(status)}</div>
-        ${game.answersOpen ? '<div style="margin-top:6px;color:#ffd15c;font-weight:900;">Antworten sind noch offen. Beim Anzeigen der Lösung werden sie automatisch geschlossen.</div>' : ''}
-        <div class="row" style="margin-top:10px;">
-          <button class="primary" data-percent-action="show-solution" ${game.answersOpen ? 'data-percent-confirm-open="1"' : ''}>Lösung anzeigen</button>
-          <button data-percent-action="hide-solution" ${visible ? '' : 'disabled'}>Lösung ausblenden</button>
-          <button data-percent-action="show-results">Zur Auswertung</button>
-        </div>
+      <div class="row" style="margin-top:10px;">
+        ${solutionShown ? '' : `<button class="primary" data-percent-action="show-solution" ${game.answersOpen ? 'data-percent-confirm-open="1"' : ''}>${showLabel}</button>`}
+        ${stepButtons}
+        <button data-percent-action="hide-solution" ${solutionShown ? '' : 'disabled'}>Lösung ausblenden</button>
+        <button data-percent-action="reset-answers">Antworten zurücksetzen</button>
+        <button data-percent-action="show-results">Gesamt-Auswertung</button>
+        <button data-percent-action="back-to-selection">Zurück zur Frageauswahl</button>
       </div>`;
   }
 
   function percentBettingAdmin(game, players) {
-    const lockedCount = players.filter((player) => game.betsByPlayerId[player.id] && game.betsByPlayerId[player.id].locked).length;
+    const lockedCount = players.filter((player) => {
+      const entry = game.betsByPlayerId[player.id];
+      return entry && entry.locked && entry.amount > 0;
+    }).length;
     return `
       <div class="game-detail mini percent-betting-admin">
-        <b>Einsatzphase</b>
+        <b>Einsatzphase (jeder Spieler wählt EINE Frage)</b>
         <div class="muted">${lockedCount}/${players.length} Spieler haben Einsätze eingeloggt.</div>
         <div class="row" style="margin-top:10px;">
           <button class="primary" data-percent-action="open-betting">Einsatzphase öffnen</button>
@@ -1031,17 +1045,19 @@
   }
 
   function percentBetPlayerRow(player, game) {
-    const entry = game.betsByPlayerId[player.id] || { locked: false, bets: {} };
+    const entry = game.betsByPlayerId[player.id] || null;
     const debited = game.debitedBetsByPlayerId[player.id];
-    const summary = percentBetSummary(percentEffectiveBettingBalance(player, debited), game.questions, entry.bets || {});
+    const question = entry && entry.questionId
+      ? game.questions.find((item) => item.id === entry.questionId) || null
+      : null;
+    const betText = question && entry.amount > 0
+      ? `${esc(question.label)} · Einsatz ${percentFormatChips(entry.amount)} · bei richtig ${percentFormatChips(percentChipPayout(entry.amount * Number(question.multiplier || 1)))}`
+      : 'Kein Einsatz';
     return `
       <div class="game-detail mini">
         <b style="color:${player.color}">${esc(player.name)}</b>
-        <div class="muted">
-          Kontostand: ${percentFormatChips(player.score)} · gesetzt: ${percentFormatChips(summary.total)} · verbleibend: ${percentFormatChips(summary.remaining)} · alles richtig: ${percentFormatChips(summary.maxBalance)}
-        </div>
-        <div class="muted">Eingeloggt: ${entry.locked ? 'Ja' : 'Nein'}${debited ? ` · abgezogen: ${percentFormatChips(debited.amount)}` : ''}</div>
-        <div class="muted">${game.questions.map((question) => `${esc(question.label)}: ${percentFormatChips(entry.bets && entry.bets[question.id])}`).join(' · ')}</div>
+        <div class="muted">${betText} · Eingeloggt: ${entry && entry.locked ? 'Ja' : 'Nein'}${debited ? ` · abgezogen: ${percentFormatChips(debited.amount)}` : ''}</div>
+        <div class="muted">Kontostand: ${percentFormatChips(player.score)}</div>
       </div>`;
   }
 
@@ -1049,22 +1065,32 @@
     return `
       <button class="${question.id === selectedQuestionId ? 'primary' : ''}" data-percent-question="${esc(question.id)}">
         <b>${esc(question.label)}</b>
-        <span>${question.percent}% · ${percentAnswerTypeLabel(question)} · ${esc(question.clipSrc)} · ${esc(question.originalStart)}-${esc(question.originalEnd)}${question.clipExists ? '' : ' · Clip fehlt'}</span>
+        <span>x${percentFormatMultiplier(question.multiplier)} · ${percentAnswerTypeLabel(question)}</span>
       </button>`;
   }
 
   function percentAnswerAdminRow(player, answer, question, game, payout) {
-    const bet = percentBetFor(game, player.id, question.id);
+    const entry = game.betsByPlayerId[player.id] || null;
+    const mine = entry && entry.questionId === question.id && entry.amount > 0;
+    if (!mine) {
+      return `
+        <div class="game-detail mini">
+          <b style="color:${player.color}">${esc(player.name)}</b>
+          <div class="muted">Hat diese Frage nicht gewählt.</div>
+        </div>`;
+    }
+    const bet = entry.amount;
     const potential = percentChipPayout(bet * Number(question.multiplier || 1));
     const locked = payout && payout.applied;
     return `
       <div class="game-detail mini">
         <b style="color:${player.color}">${esc(player.name)}</b>
-        <div class="muted">Antwort: ${answer ? esc(percentFormatAnswer(answer.answer)) : 'noch offen'} · Einsatz: ${percentFormatChips(bet)} · x${percentFormatMultiplier(question.multiplier)} · Auszahlung: ${payout ? percentFormatChips(payout.payoutAmount) : percentFormatChips(potential)}</div>
+        <div class="muted">Antwort: ${answer ? esc(percentAnswerLabel(question, answer.answer)) : 'noch offen'} · Einsatz: ${percentFormatChips(bet)} · x${percentFormatMultiplier(question.multiplier)} · Auszahlung: ${payout ? percentFormatChips(payout.payoutAmount) : `bis zu ${percentFormatChips(potential)}`}</div>
         <div class="row" style="margin-top:6px;">
           ${locked
-            ? `<span class="muted">Bewertet: ${payout.isCorrect ? 'Richtig' : 'Falsch'} · angewendet</span>`
+            ? `<span class="muted">Bewertet: ${payout.isCorrect ? 'Richtig' : 'Falsch'} · ausgezahlt</span>`
             : `
+              <span class="muted">Manuell (überschreibt Auto-Wertung):</span>
               <button class="good" data-percent-eval-player="${player.id}" data-percent-eval-question="${question.id}" data-percent-correct="1">Richtig</button>
               <button class="bad" data-percent-eval-player="${player.id}" data-percent-eval-question="${question.id}" data-percent-correct="0">Falsch</button>
             `}
@@ -1078,13 +1104,15 @@
       selectedQuestionId: raw.selectedQuestionId || null,
       phase: raw.phase || 'idle',
       answersOpen: raw.answersOpen === true,
-      clipPlayback: raw.clipPlayback || {},
+      revealStep: Number(raw.revealStep) || 0,
+      timer: raw.timer && typeof raw.timer === 'object' ? raw.timer : {},
       answersByQuestionId: raw.answersByQuestionId || {},
       betsByPlayerId: raw.betsByPlayerId || {},
       debitedBetsByPlayerId: raw.debitedBetsByPlayerId || {},
       payoutsByQuestionId: raw.payoutsByQuestionId || {},
       solutionVisible: raw.solutionVisible === true,
-      solutionShownForQuestionId: raw.solutionShownForQuestionId || null,
+      solutionStep: Number(raw.solutionStep) || 0,
+      solution: raw.solution && typeof raw.solution === 'object' ? raw.solution : null,
       questions: Array.isArray(raw.questions) ? raw.questions : [],
       adminWarning: String(raw.adminWarning || ''),
     };
@@ -1098,56 +1126,33 @@
     return (game.payoutsByQuestionId && game.payoutsByQuestionId[questionId]) || {};
   }
 
-  function percentBetFor(game, playerId, questionId) {
-    const entry = game.betsByPlayerId[playerId];
-    return Number(entry && entry.bets && entry.bets[questionId]) || 0;
-  }
-
   function percentPhaseLabel(phase) {
     return {
       idle: 'Keine Frage',
       betting: 'Einsatzphase offen',
-      bettingLocked: 'Einsatzphase geschlossen',
-      selected: 'Frage ausgewählt',
-      playing: 'Clip läuft',
-      answering: 'Antworten offen',
-      locked: 'Antworten geschlossen',
+      bettingLocked: 'Einsätze fixiert',
+      selected: 'Frage ausgewählt (aufdecken)',
+      answering: 'Timer läuft',
+      locked: 'Antworten gesperrt',
       results: 'Auswertung',
-      payout: 'Auszahlung',
     }[phase] || phase || '-';
   }
 
   function percentAnswerTypeLabel(question) {
     if (!question) return '-';
-    if (question.answerType === 'choice') return `Multiple Choice ${question.options.join('/')}`;
+    if (question.answerType === 'choice') {
+      return `Auswahl ${(question.options || []).map((option) => option.value).join('/')}`;
+    }
     if (question.answerType === 'number') return 'Zahleneingabe';
-    if (question.answerType === 'grid') return `${question.gridCols}x${question.gridRows}-Grid`;
     return question.answerType || '-';
   }
 
-  function percentFormatAnswer(answer) {
-    return /^R\dC\d$/.test(answer) ? answer.replace('R', 'Reihe ').replace('C', ', Spalte ') : answer;
-  }
-
-  function percentBetSummary(balance, questions, bets) {
-    const total = Object.values(bets || {}).reduce((sum, value) => sum + percentNormalizedBet(value), 0);
-    const maxPayout = questions.reduce((sum, question) => {
-      const bet = percentNormalizedBet(bets && bets[question.id]);
-      return sum + percentChipPayout(bet * Number(question.multiplier || 1));
-    }, 0);
-    return {
-      total,
-      remaining: Math.max(0, (Number(balance) || 0) - total),
-      maxBalance: percentChipPayout((Number(balance) || 0) - total + maxPayout),
-    };
-  }
-
-  function percentEffectiveBettingBalance(player, debit) {
-    return (Number(player.score) || 0) + (Number(debit && debit.amount) || 0);
-  }
-
-  function percentNormalizedBet(value) {
-    return Math.max(0, Math.floor(Number(value) || 0));
+  function percentAnswerLabel(question, value) {
+    if (question.answerType === 'choice') {
+      const option = (question.options || []).find((entry) => entry.value === value);
+      if (option && option.label !== option.value) return `${option.value} – ${option.label}`;
+    }
+    return String(value);
   }
 
   function percentChipPayout(value) {
@@ -1505,10 +1510,9 @@
 
     activeGameEl.querySelectorAll('[data-percent-action]').forEach((button) => {
       button.onclick = () => {
+        const action = button.dataset.percentAction;
         if (button.dataset.percentConfirmOpen === '1' && !confirm('Antworten sind noch offen. Lösung trotzdem anzeigen?')) return;
-        App.socket.emit('game:action', {
-          type: `percent:${button.dataset.percentAction}`,
-        });
+        App.socket.emit('game:action', { type: `percent:${action}` });
       };
     });
 
@@ -1521,6 +1525,25 @@
           isCorrect: button.dataset.percentCorrect === '1',
         });
     });
+
+    // Restzeit-Anzeige tickt lokal weiter, weil der Server nur bei
+    // State-Änderungen rendert.
+    if (window.__percentAdminTimerInterval) {
+      clearInterval(window.__percentAdminTimerInterval);
+      window.__percentAdminTimerInterval = null;
+    }
+    const timerEl = activeGameEl.querySelector('[data-percent-admin-timer]');
+    if (timerEl) {
+      const endsAt = Number(timerEl.dataset.endsAt) || 0;
+      window.__percentAdminTimerInterval = setInterval(() => {
+        if (!document.body.contains(timerEl)) {
+          clearInterval(window.__percentAdminTimerInterval);
+          window.__percentAdminTimerInterval = null;
+          return;
+        }
+        timerEl.textContent = `${Math.max(0, Math.ceil((endsAt - Date.now()) / 1000))}s`;
+      }, 500);
+    }
   }
 
   function playerName(state, playerId) {

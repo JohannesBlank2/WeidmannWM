@@ -2,9 +2,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PERCENT_QUIZ_QUESTIONS } = require('./percentQuizQuestions');
+const { PERCENT_QUIZ_QUESTIONS, DEFAULT_TIMER_SECONDS } = require('./percentQuizQuestions');
 
-const PUBLIC_ROOT = path.join(__dirname, '..', '..', 'public');
+// /assets wird vom Server aus dem Repo-Root ausgeliefert.
+const REPO_ROOT = path.join(__dirname, '..', '..');
+
+// Kulanzfenster: Antworten, die knapp nach Timer-Ende eintreffen, zählen noch.
+const ANSWER_GRACE_MS = 1500;
+// Der Timer gilt als abgelaufen, sobald die Restzeit unter dieser Schwelle liegt.
+const EXPIRE_TOLERANCE_MS = 400;
 
 module.exports = {
   id: 'das-prozent-quiz',
@@ -12,9 +18,14 @@ module.exports = {
   category: 'quiz',
   title: 'Das Prozent-Quiz',
   responsiblePerson: 'Admin',
-  description: 'Bonusspiel mit lokalen Videoclips und Handy-Antworten.',
-  rules: 'Admin wählt eine Prozent-Frage, startet den Clip und öffnet die Antworten. Spieler loggen genau eine Antwort ein. Es gibt keine automatische Punktewertung.',
-  materials: ['TV-Display', 'Spieler-Handys', 'lokale MP4-Clips'],
+  description: 'Bonusspiel mit nachgebauten 1%-Quiz-Fragen, Timer und Handy-Antworten.',
+  rules:
+    'Spieler wählen zu Beginn genau eine Frage (25%, 10% oder 1%) und setzen Chips. ' +
+    'Die Spielleitung deckt die Frage Schritt für Schritt auf, liest sie vor und startet den Timer. ' +
+    'Während der Timer läuft, loggen die Spieler ihre Antwort am Handy ein. ' +
+    'Richtige Antwort: Einsatz x2 (25%), x3 (10%) oder x4 (1%). ' +
+    'Die Auszahlung erfolgt automatisch beim Aufdecken der Lösung.',
+  materials: ['TV-Display', 'Spieler-Handys'],
   hasBeenPlayed: false,
   selectable: false,
   interaktionstyp: 'keine',
@@ -44,24 +55,14 @@ module.exports = {
       return;
     }
 
-    if (action.type === 'percent:submit-bets') {
-      submitBets(ctx, state, playerId, action);
+    if (action.type === 'percent:submit-bet') {
+      submitBet(ctx, state, playerId, action);
       return;
     }
 
-    if (action.type === 'percent:clip-ended') {
+    if (action.type === 'percent:timer-expired') {
       if (!display && !admin) return;
-      if (!state.selectedQuestionId) return;
-      ctx.setGameState({
-        ...state,
-        phase: 'locked',
-        answersOpen: false,
-        clipPlayback: {
-          ...state.clipPlayback,
-          isPlaying: false,
-          endedAt: Date.now(),
-        },
-      });
+      expireTimer(ctx, state);
       return;
     }
 
@@ -78,7 +79,8 @@ module.exports = {
         phase: 'betting',
         answersOpen: false,
         solutionVisible: false,
-        solutionShownForQuestionId: null,
+        solutionStep: 0,
+        solution: null,
         adminWarning: '',
       });
       return;
@@ -109,57 +111,23 @@ module.exports = {
       return;
     }
 
-    if (action.type === 'percent:open-answers') {
-      if (!state.selectedQuestionId) return;
-      ctx.setGameState({
-        ...state,
-        phase: state.phase === 'playing' ? 'playing' : 'answering',
-        answersOpen: true,
-      });
+    if (action.type === 'percent:reveal-step') {
+      changeRevealStep(ctx, state, 1);
       return;
     }
 
-    if (action.type === 'percent:close-answers') {
-      if (!state.selectedQuestionId) return;
-      ctx.setGameState({
-        ...state,
-        phase: state.phase === 'results' ? 'results' : 'locked',
-        answersOpen: false,
-      });
+    if (action.type === 'percent:unreveal-step') {
+      changeRevealStep(ctx, state, -1);
       return;
     }
 
-    if (action.type === 'percent:start-clip') {
-      if (!state.selectedQuestionId) {
-        ctx.setGameState({ ...state, adminWarning: 'Bitte zuerst eine Frage auswählen.' });
-        return;
-      }
-      startClip(ctx, state, false);
+    if (action.type === 'percent:start-timer') {
+      startTimer(ctx, state, action.seconds);
       return;
     }
 
-    if (action.type === 'percent:pause-clip') {
-      if (!state.selectedQuestionId) return;
-      ctx.setGameState({
-        ...state,
-        phase: state.answersOpen ? 'answering' : 'selected',
-        clipPlayback: {
-          ...state.clipPlayback,
-          isPlaying: false,
-          pausedAt: Date.now(),
-          command: 'pause',
-          commandId: state.clipPlayback.commandId + 1,
-        },
-      });
-      return;
-    }
-
-    if (action.type === 'percent:restart-clip') {
-      if (!state.selectedQuestionId) {
-        ctx.setGameState({ ...state, adminWarning: 'Bitte zuerst eine Frage auswählen.' });
-        return;
-      }
-      startClip(ctx, state, true);
+    if (action.type === 'percent:stop-timer') {
+      stopTimer(ctx, state);
       return;
     }
 
@@ -170,28 +138,13 @@ module.exports = {
       ctx.setGameState({
         ...state,
         answersByQuestionId,
-        phase: state.phase === 'results' ? 'selected' : state.phase,
-        solutionVisible: false,
-        solutionShownForQuestionId: null,
-        adminWarning: '',
-      });
-      return;
-    }
-
-    if (action.type === 'percent:show-results') {
-      if (!state.selectedQuestionId) return;
-      ctx.setGameState({
-        ...state,
-        phase: 'results',
+        phase: 'selected',
         answersOpen: false,
+        timer: resetTimer(state.timer),
         solutionVisible: false,
-        solutionShownForQuestionId: null,
-        clipPlayback: {
-          ...state.clipPlayback,
-          isPlaying: false,
-          command: 'pause',
-          commandId: state.clipPlayback.commandId + 1,
-        },
+        solutionStep: 0,
+        solution: null,
+        adminWarning: '',
       });
       return;
     }
@@ -201,18 +154,43 @@ module.exports = {
       return;
     }
 
+    if (action.type === 'percent:solution-step') {
+      changeSolutionStep(ctx, state, 1);
+      return;
+    }
+
+    if (action.type === 'percent:solution-unstep') {
+      changeSolutionStep(ctx, state, -1);
+      return;
+    }
+
     if (action.type === 'percent:hide-solution') {
       ctx.setGameState({
         ...state,
         solutionVisible: false,
-        solutionShownForQuestionId: null,
+        solutionStep: 0,
+        solution: null,
+        adminWarning: '',
+      });
+      return;
+    }
+
+    if (action.type === 'percent:show-results') {
+      ctx.setGameState({
+        ...state,
+        phase: 'results',
+        answersOpen: false,
+        timer: resetTimer(state.timer),
+        solutionVisible: false,
+        solutionStep: 0,
+        solution: null,
         adminWarning: '',
       });
       return;
     }
 
     if (action.type === 'percent:evaluate-answer') {
-      evaluateAnswer(ctx, state, action);
+      evaluateAnswerManually(ctx, state, action);
       return;
     }
 
@@ -221,14 +199,11 @@ module.exports = {
         ...state,
         phase: state.selectedQuestionId ? 'selected' : 'idle',
         answersOpen: false,
+        timer: resetTimer(state.timer),
         solutionVisible: false,
-        solutionShownForQuestionId: null,
-        clipPlayback: {
-          ...state.clipPlayback,
-          isPlaying: false,
-          command: 'pause',
-          commandId: state.clipPlayback.commandId + 1,
-        },
+        solutionStep: 0,
+        solution: null,
+        adminWarning: '',
       });
     }
   },
@@ -239,27 +214,33 @@ function defaultGameState() {
     selectedQuestionId: null,
     phase: 'idle',
     answersOpen: false,
-    clipPlayback: defaultClipPlayback(),
+    revealStep: 0,
+    timer: defaultTimer(),
     answersByQuestionId: {},
     betsByPlayerId: {},
     debitedBetsByPlayerId: {},
     payoutsByQuestionId: {},
     solutionVisible: false,
-    solutionShownForQuestionId: null,
-    questions: questionsWithClipStatus(),
+    solutionStep: 0,
+    solution: null,
+    questions: questionsForClients(),
     adminWarning: '',
   };
 }
 
-function defaultClipPlayback() {
+function defaultTimer() {
   return {
-    isPlaying: false,
+    durationSeconds: DEFAULT_TIMER_SECONDS,
     startedAt: null,
-    pausedAt: null,
-    endedAt: null,
-    currentTime: 0,
-    command: 'idle',
-    commandId: 0,
+    endsAt: null,
+    running: false,
+  };
+}
+
+function resetTimer(timer) {
+  return {
+    ...defaultTimer(),
+    durationSeconds: clampInt(timer && timer.durationSeconds, 5, 600) || DEFAULT_TIMER_SECONDS,
   };
 }
 
@@ -267,8 +248,7 @@ function ensureGameState(value) {
   const base = defaultGameState();
   const saved = value && typeof value === 'object' ? value : {};
   const selectedQuestionId = questionById(saved.selectedQuestionId) ? saved.selectedQuestionId : null;
-  const solutionShownForQuestionId = questionById(saved.solutionShownForQuestionId) ? saved.solutionShownForQuestionId : null;
-  const phase = ['idle', 'betting', 'bettingLocked', 'selected', 'playing', 'answering', 'locked', 'results', 'payout'].includes(saved.phase)
+  const phase = ['idle', 'betting', 'bettingLocked', 'selected', 'answering', 'locked', 'results'].includes(saved.phase)
     ? saved.phase
     : selectedQuestionId
       ? 'selected'
@@ -280,27 +260,43 @@ function ensureGameState(value) {
     selectedQuestionId,
     phase,
     answersOpen: saved.answersOpen === true,
-    clipPlayback: normalizeClipPlayback(saved.clipPlayback),
+    revealStep: clampInt(saved.revealStep, 0, maxRevealStep(selectedQuestionId)),
+    timer: normalizeTimer(saved.timer),
     answersByQuestionId: normalizeAnswersByQuestionId(saved.answersByQuestionId),
     betsByPlayerId: normalizeBetsByPlayerId(saved.betsByPlayerId),
     debitedBetsByPlayerId: normalizeDebitedBets(saved.debitedBetsByPlayerId),
     payoutsByQuestionId: normalizePayoutsByQuestionId(saved.payoutsByQuestionId),
-    solutionVisible: saved.solutionVisible === true && selectedQuestionId === solutionShownForQuestionId,
-    solutionShownForQuestionId: selectedQuestionId === solutionShownForQuestionId ? solutionShownForQuestionId : null,
-    questions: questionsWithClipStatus(),
+    solutionVisible: saved.solutionVisible === true,
+    solutionStep: clampInt(saved.solutionStep, 0, maxSolutionStep(selectedQuestionId)),
+    solution: normalizeSolution(saved.solution),
+    questions: questionsForClients(),
     adminWarning: String(saved.adminWarning || '').slice(0, 160),
   };
 }
 
-function normalizeClipPlayback(value) {
-  const base = defaultClipPlayback();
+function normalizeTimer(value) {
+  const base = defaultTimer();
   const saved = value && typeof value === 'object' ? value : {};
   return {
-    ...base,
-    ...saved,
-    isPlaying: saved.isPlaying === true,
-    commandId: Number(saved.commandId) || 0,
-    currentTime: Number(saved.currentTime) || 0,
+    durationSeconds: clampInt(saved.durationSeconds, 5, 600) || base.durationSeconds,
+    startedAt: Number(saved.startedAt) || null,
+    endsAt: Number(saved.endsAt) || null,
+    running: saved.running === true,
+  };
+}
+
+function normalizeSolution(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (!questionById(value.questionId)) return null;
+  return {
+    questionId: value.questionId,
+    value: String(value.value || ''),
+    label: String(value.label || ''),
+    explanation: String(value.explanation || ''),
+    imageSrc: String(value.imageSrc || ''),
+    answerRevealed: value.answerRevealed === true,
+    overlayCount: Math.max(0, Number(value.overlayCount) || 0),
+    revealedOverlays: Array.isArray(value.revealedOverlays) ? value.revealedOverlays : [],
   };
 }
 
@@ -318,20 +314,13 @@ function normalizeBetsByPlayerId(value) {
   if (!value || typeof value !== 'object') return {};
   const out = {};
   for (const [playerId, entry] of Object.entries(value)) {
-    const bets = entry && entry.bets && typeof entry.bets === 'object' ? entry.bets : {};
+    if (!entry || typeof entry !== 'object') continue;
     out[playerId] = {
-      locked: entry && entry.locked === true,
-      lockedAt: Number(entry && entry.lockedAt) || null,
-      bets: normalizeQuestionBets(bets),
+      locked: entry.locked === true,
+      lockedAt: Number(entry.lockedAt) || null,
+      questionId: questionById(entry.questionId) ? entry.questionId : null,
+      amount: clampInt(entry.amount, 0, Number.MAX_SAFE_INTEGER),
     };
-  }
-  return out;
-}
-
-function normalizeQuestionBets(value) {
-  const out = {};
-  for (const question of PERCENT_QUIZ_QUESTIONS) {
-    out[question.id] = clampInt(value && value[question.id], 0, Number.MAX_SAFE_INTEGER);
   }
   return out;
 }
@@ -369,12 +358,33 @@ function normalizePayoutsByQuestionId(value) {
   return out;
 }
 
-function questionsWithClipStatus() {
-  return PERCENT_QUIZ_QUESTIONS.map((question) => ({
+// Die Fragen gehen an alle Clients (auch Spieler-Handys). Lösung, Erklärung
+// und die Lösungs-Einblendungen bleiben deshalb serverseitig, bis sie
+// aufgedeckt werden. Für die Admin-Buttons gehen nur neutrale Labels raus.
+function questionsForClients() {
+  return PERCENT_QUIZ_QUESTIONS.map(({ correctAnswer, explanation, solutionSteps, ...question }) => ({
     ...question,
-    clipExists: clipExists(question.clipSrc),
-    solutionExists: assetExists(question.solutionImageSrc),
+    imageExists: question.imageSrc ? assetExists(question.imageSrc) : false,
+    solutionStepLabels: (solutionSteps || []).map((step) => step.adminLabel),
   }));
+}
+
+function assetExists(assetSrc) {
+  const normalized = String(assetSrc || '').replace(/^\/+/, '');
+  return fs.existsSync(path.join(REPO_ROOT, normalized));
+}
+
+function maxRevealStep(questionId) {
+  const question = questionById(questionId);
+  return question ? question.revealSteps.length : 0;
+}
+
+// Lösungs-Schritte: alle Einblendungen + 1 finaler Ergebnis-Schritt.
+function maxSolutionStep(questionId) {
+  const question = questionById(questionId);
+  if (!question) return 0;
+  const overlays = question.solutionSteps || [];
+  return overlays.length ? overlays.length + 1 : 0;
 }
 
 function selectQuestion(ctx, state, questionId) {
@@ -385,33 +395,77 @@ function selectQuestion(ctx, state, questionId) {
     selectedQuestionId: question.id,
     phase: 'selected',
     answersOpen: false,
-    clipPlayback: defaultClipPlayback(),
+    revealStep: 0,
+    timer: resetTimer(state.timer),
     solutionVisible: false,
-    solutionShownForQuestionId: null,
-    questions: questionsWithClipStatus(),
+    solutionStep: 0,
+    solution: null,
     adminWarning: '',
   });
 }
 
-function startClip(ctx, state, restart) {
+function changeRevealStep(ctx, state, delta) {
+  if (!state.selectedQuestionId) return;
+  const next = clampInt(state.revealStep + delta, 0, maxRevealStep(state.selectedQuestionId));
+  if (next === state.revealStep) return;
   ctx.setGameState({
     ...state,
-    phase: 'playing',
-    answersOpen: true,
-    solutionVisible: false,
-    solutionShownForQuestionId: null,
-    clipPlayback: {
-      ...state.clipPlayback,
-      isPlaying: true,
-      startedAt: Date.now(),
-      pausedAt: null,
-      endedAt: null,
-      currentTime: restart ? 0 : state.clipPlayback.currentTime || 0,
-      command: restart ? 'restart' : 'play',
-      commandId: state.clipPlayback.commandId + 1,
-    },
-    questions: questionsWithClipStatus(),
+    revealStep: next,
     adminWarning: '',
+  });
+}
+
+function startTimer(ctx, state, seconds) {
+  if (!state.selectedQuestionId) {
+    ctx.setGameState({ ...state, adminWarning: 'Bitte zuerst eine Frage auswählen.' });
+    return;
+  }
+  // Fest 30 Sekunden, außer es wird explizit etwas anderes mitgeschickt.
+  const durationSeconds = clampInt(seconds, 5, 600) || DEFAULT_TIMER_SECONDS;
+  const now = Date.now();
+  ctx.setGameState({
+    ...state,
+    phase: 'answering',
+    answersOpen: true,
+    revealStep: maxRevealStep(state.selectedQuestionId),
+    timer: {
+      durationSeconds,
+      startedAt: now,
+      endsAt: now + durationSeconds * 1000,
+      running: true,
+    },
+    solutionVisible: false,
+    solutionStep: 0,
+    solution: null,
+    adminWarning: '',
+  });
+}
+
+function stopTimer(ctx, state) {
+  if (!state.selectedQuestionId) return;
+  ctx.setGameState({
+    ...state,
+    phase: 'locked',
+    answersOpen: false,
+    timer: {
+      ...state.timer,
+      running: false,
+    },
+    adminWarning: '',
+  });
+}
+
+function expireTimer(ctx, state) {
+  if (!state.timer.running || !state.timer.endsAt) return;
+  if (Date.now() < state.timer.endsAt - EXPIRE_TOLERANCE_MS) return;
+  ctx.setGameState({
+    ...state,
+    phase: 'locked',
+    answersOpen: false,
+    timer: {
+      ...state.timer,
+      running: false,
+    },
   });
 }
 
@@ -420,7 +474,13 @@ function submitAnswer(ctx, state, playerId, action) {
   const question = questionById(state.selectedQuestionId);
   if (!question) return;
 
-  const existingAnswers = state.answersByQuestionId[state.selectedQuestionId] || {};
+  if (state.timer.running && state.timer.endsAt && Date.now() > state.timer.endsAt + ANSWER_GRACE_MS) return;
+
+  // Nur wer diese Frage gewählt und Chips gesetzt hat, darf antworten.
+  const bet = state.betsByPlayerId[playerId];
+  if (!bet || bet.questionId !== question.id || bet.amount <= 0) return;
+
+  const existingAnswers = state.answersByQuestionId[question.id] || {};
   if (existingAnswers[playerId]) return;
 
   const answer = normalizeAnswer(question, action.answer);
@@ -429,10 +489,9 @@ function submitAnswer(ctx, state, playerId, action) {
   const player = ctx.state.players.find((entry) => entry.id === playerId);
   ctx.setGameState({
     ...state,
-    phase: state.phase === 'playing' ? 'playing' : 'answering',
     answersByQuestionId: {
       ...state.answersByQuestionId,
-      [state.selectedQuestionId]: {
+      [question.id]: {
         ...existingAnswers,
         [playerId]: {
           playerId,
@@ -446,7 +505,7 @@ function submitAnswer(ctx, state, playerId, action) {
   });
 }
 
-function submitBets(ctx, state, playerId, action) {
+function submitBet(ctx, state, playerId, action) {
   if (!playerId || state.phase !== 'betting') return;
   const player = ctx.state.players.find((entry) => entry.id === playerId);
   if (!player) return;
@@ -454,10 +513,13 @@ function submitBets(ctx, state, playerId, action) {
   const existing = state.betsByPlayerId[playerId];
   if (existing && existing.locked) return;
 
-  const bets = normalizeQuestionBets(action.bets || {});
-  const total = totalBet(bets);
+  const question = questionById(action.questionId);
+  if (!question) return;
+
+  const amount = clampInt(action.amount, 0, Number.MAX_SAFE_INTEGER);
+  if (amount <= 0) return;
   const balance = Math.max(0, Number(player.score) || 0);
-  if (total > balance) return;
+  if (amount > balance) return;
 
   ctx.setGameState({
     ...state,
@@ -466,7 +528,8 @@ function submitBets(ctx, state, playerId, action) {
       [playerId]: {
         locked: true,
         lockedAt: Date.now(),
-        bets,
+        questionId: question.id,
+        amount,
       },
     },
     adminWarning: '',
@@ -477,8 +540,8 @@ function closeBetting(ctx, state) {
   const nextDebited = { ...state.debitedBetsByPlayerId };
 
   for (const player of ctx.state.players) {
-    const entry = state.betsByPlayerId[player.id] || { locked: false, bets: {} };
-    const amount = totalBet(entry.bets || {});
+    const entry = state.betsByPlayerId[player.id];
+    const amount = entry ? entry.amount : 0;
     if (nextDebited[player.id]) continue;
     if (amount > 0) {
       ctx.addPoints(player.id, -amount);
@@ -553,16 +616,141 @@ function refundDebitedBets(ctx, state) {
   }
 }
 
-function evaluateAnswer(ctx, state, action) {
-  const question = questionById(action.questionId || state.selectedQuestionId);
+function showSolution(ctx, state) {
+  const question = fullQuestionById(state.selectedQuestionId);
+  if (!question) {
+    ctx.setGameState({
+      ...state,
+      adminWarning: 'Keine Frage ausgewählt.',
+    });
+    return;
+  }
+
+  const hasOverlays = (question.solutionSteps || []).length > 0;
+
+  // Ohne Einblendungen wird die Antwort sofort gezeigt und ausgezahlt.
+  // Mit Einblendungen (z. B. 1% Frage) passiert das erst beim Ergebnis-Schritt.
+  const payoutsByQuestionId = hasOverlays
+    ? state.payoutsByQuestionId
+    : autoEvaluate(ctx, state, question);
+
+  ctx.setGameState({
+    ...state,
+    phase: 'locked',
+    answersOpen: false,
+    timer: {
+      ...state.timer,
+      running: false,
+    },
+    payoutsByQuestionId,
+    solutionVisible: true,
+    solutionStep: 0,
+    solution: buildSolutionPayload(question, 0),
+    adminWarning: '',
+  });
+}
+
+function changeSolutionStep(ctx, state, delta) {
+  const question = fullQuestionById(state.selectedQuestionId);
+  if (!question || !state.solutionVisible) return;
+  const total = maxSolutionStep(question.id);
+  if (!total) return;
+
+  const next = clampInt(state.solutionStep + delta, 0, total);
+  if (next === state.solutionStep) return;
+
+  const wasRevealed = solutionAnswerRevealed(question, state.solutionStep);
+  const nowRevealed = solutionAnswerRevealed(question, next);
+
+  // Beim Aufdecken des Ergebnis-Schritts automatisch auszahlen (idempotent).
+  const payoutsByQuestionId = !wasRevealed && nowRevealed
+    ? autoEvaluate(ctx, state, question)
+    : state.payoutsByQuestionId;
+
+  ctx.setGameState({
+    ...state,
+    solutionStep: next,
+    payoutsByQuestionId,
+    solution: buildSolutionPayload(question, next),
+    adminWarning: '',
+  });
+}
+
+function solutionAnswerRevealed(question, solutionStep) {
+  const overlays = question.solutionSteps || [];
+  if (!overlays.length) return true;
+  return solutionStep >= overlays.length + 1;
+}
+
+function buildSolutionPayload(question, solutionStep) {
+  const overlays = question.solutionSteps || [];
+  const answerRevealed = solutionAnswerRevealed(question, solutionStep);
+  return {
+    questionId: question.id,
+    imageSrc: question.imageSrc || '',
+    overlayCount: overlays.length,
+    revealedOverlays: overlays.slice(0, Math.min(solutionStep, overlays.length)).map((step) => ({
+      id: step.id,
+      lines: step.lines,
+      x: step.x,
+      y: step.y,
+    })),
+    answerRevealed,
+    value: answerRevealed ? question.correctAnswer : '',
+    label: answerRevealed ? solutionLabel(question) : '',
+    explanation: answerRevealed ? question.explanation : '',
+  };
+}
+
+// Automatische Auszahlung: Nur Spieler, die diese Frage gewählt haben.
+// Bereits angewendete Bewertungen bleiben unangetastet (idempotent).
+function autoEvaluate(ctx, state, question) {
+  const questionPayouts = { ...(state.payoutsByQuestionId[question.id] || {}) };
+  const answers = state.answersByQuestionId[question.id] || {};
+
+  for (const player of ctx.state.players) {
+    const bet = state.betsByPlayerId[player.id];
+    if (!bet || bet.questionId !== question.id || bet.amount <= 0) continue;
+    if (questionPayouts[player.id] && questionPayouts[player.id].applied) continue;
+
+    const answerRow = answers[player.id];
+    const isCorrect = answerRow ? isAnswerCorrect(question, answerRow.answer) : false;
+    const multiplier = Number(question.multiplier) || 1;
+    const payoutAmount = isCorrect ? roundChipPayout(bet.amount * multiplier) : 0;
+
+    if (payoutAmount > 0) {
+      ctx.addPoints(player.id, payoutAmount);
+    }
+
+    questionPayouts[player.id] = {
+      evaluated: true,
+      isCorrect,
+      betAmount: bet.amount,
+      multiplier,
+      payoutAmount,
+      applied: true,
+      appliedAt: Date.now(),
+    };
+  }
+
+  return {
+    ...state.payoutsByQuestionId,
+    [question.id]: questionPayouts,
+  };
+}
+
+// Manuelle Korrektur durch die Spielleitung, solange noch nichts angewendet ist.
+function evaluateAnswerManually(ctx, state, action) {
+  const question = fullQuestionById(action.questionId || state.selectedQuestionId);
   const player = ctx.state.players.find((entry) => entry.id === action.playerId);
   if (!question || !player) return;
 
   const questionPayouts = state.payoutsByQuestionId[question.id] || {};
   if (questionPayouts[player.id] && questionPayouts[player.id].applied) return;
 
+  const bet = state.betsByPlayerId[player.id];
+  const betAmount = bet && bet.questionId === question.id ? bet.amount : 0;
   const isCorrect = action.isCorrect === true;
-  const betAmount = betForPlayerQuestion(state, player.id, question.id);
   const multiplier = Number(question.multiplier) || 1;
   const payoutAmount = isCorrect ? roundChipPayout(betAmount * multiplier) : 0;
 
@@ -587,50 +775,37 @@ function evaluateAnswer(ctx, state, action) {
         },
       },
     },
-    phase: state.phase === 'results' ? 'results' : 'payout',
     adminWarning: '',
   });
 }
 
-function showSolution(ctx, state) {
-  const question = questionById(state.selectedQuestionId);
-  if (!question) {
-    ctx.setGameState({
-      ...state,
-      adminWarning: 'Keine Frage ausgewählt.',
-    });
-    return;
+function isAnswerCorrect(question, answer) {
+  const given = String(answer == null ? '' : answer).trim();
+  const expected = String(question.correctAnswer == null ? '' : question.correctAnswer).trim();
+  if (!given || !expected) return false;
+  if (question.answerType === 'number') {
+    const givenNumber = Number(given.replace(',', '.'));
+    const expectedNumber = Number(expected.replace(',', '.'));
+    if (!Number.isFinite(givenNumber) || !Number.isFinite(expectedNumber)) return false;
+    return Math.abs(givenNumber - expectedNumber) < 1e-9;
   }
+  return given.toUpperCase() === expected.toUpperCase();
+}
 
-  ctx.setGameState({
-    ...state,
-    answersOpen: false,
-    solutionVisible: true,
-    solutionShownForQuestionId: question.id,
-    clipPlayback: {
-      ...state.clipPlayback,
-      isPlaying: false,
-      command: 'pause',
-      commandId: state.clipPlayback.commandId + 1,
-    },
-    questions: questionsWithClipStatus(),
-    adminWarning: '',
-  });
+function solutionLabel(question) {
+  if (question.answerType === 'choice') {
+    const option = (question.options || []).find((entry) => entry.value === question.correctAnswer);
+    if (option && option.label !== option.value) {
+      return `${option.value} – ${option.label}`;
+    }
+  }
+  return String(question.correctAnswer);
 }
 
 function hasAppliedPayouts(state) {
   return Object.values(state.payoutsByQuestionId || {}).some((questionRows) =>
     Object.values(questionRows || {}).some((row) => row && row.applied)
   );
-}
-
-function betForPlayerQuestion(state, playerId, questionId) {
-  const entry = state.betsByPlayerId[playerId];
-  return clampInt(entry && entry.bets && entry.bets[questionId], 0, Number.MAX_SAFE_INTEGER);
-}
-
-function totalBet(bets) {
-  return Object.values(bets || {}).reduce((sum, value) => sum + clampInt(value, 0, Number.MAX_SAFE_INTEGER), 0);
 }
 
 function roundChipPayout(value) {
@@ -642,17 +817,10 @@ function normalizeAnswer(question, answer) {
   if (!value) return '';
   if (question.answerType === 'choice') {
     const upper = value.toUpperCase();
-    return question.options.includes(upper) ? upper : '';
+    return question.options.some((option) => option.value === upper) ? upper : '';
   }
   if (question.answerType === 'number') {
     return /^-?\d+(?:[,.]\d+)?$/.test(value) ? value.replace(',', '.') : '';
-  }
-  if (question.answerType === 'grid') {
-    const match = /^R([1-4])C([1-3])$/.exec(value);
-    if (!match) return '';
-    const row = Number(match[1]);
-    const col = Number(match[2]);
-    return row <= question.gridRows && col <= question.gridCols ? value : '';
   }
   return '';
 }
@@ -661,13 +829,9 @@ function questionById(questionId) {
   return PERCENT_QUIZ_QUESTIONS.find((question) => question.id === questionId) || null;
 }
 
-function clipExists(clipSrc) {
-  return assetExists(clipSrc);
-}
-
-function assetExists(assetSrc) {
-  const normalized = String(assetSrc || '').replace(/^\/+/, '');
-  return fs.existsSync(path.join(PUBLIC_ROOT, normalized));
+// Inklusive correctAnswer/explanation - nur serverseitig verwenden.
+function fullQuestionById(questionId) {
+  return questionById(questionId);
 }
 
 function clampInt(value, min, max) {

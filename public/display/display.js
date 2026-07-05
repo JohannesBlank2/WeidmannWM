@@ -27,16 +27,16 @@
   let activeAnimationSoundKey = null;
   let animationSoundTimers = [];
   let ambientAudio = null;
-  let ambientDesired = { enabled: false, trackId: 'pick-your-poison', volume: 32 };
+  let ambientDesired = { enabled: false, trackId: 'hide', volume: 32 };
   let ambientCurrentTrackId = null;
   let ambientBlocked = false;
   let crashMusicAudio = null;
   let crashExplosionAudio = null;
   let lastCrashPhase = null;
   const AMBIENT_TRACKS = [
-    { id: 'pick-your-poison', label: 'Pick Your Poison', src: '/assets/audio/pick-your-poison.mp3' },
-    { id: 'hide', label: 'Hide', src: '/assets/audio/hide.mp3' },
-    { id: 'blind-spot', label: 'Blind Spot', src: '/assets/audio/blind-spot.mp3' },
+    { id: 'hide', label: 'Sehr spannend', src: '/assets/audio/hide.mp3' },
+    { id: 'pick-your-poison', label: 'Mittel', src: '/assets/audio/pick-your-poison.mp3' },
+    { id: 'blind-spot', label: 'Chill', src: '/assets/audio/blind-spot.mp3' },
     { id: 'poker-ambiente', label: 'Poker Ambiente (Finale)', src: '/assets/audio/poker-ambiente.mp3' },
   ];
   initDisplaySoundControls();
@@ -1424,6 +1424,25 @@
     playTone(1568, 0.2, 300, 'sine', 0.08);
   }
 
+  // Winner-Sound wird von der Admin-Konsole gesteuert, spielt aber hier auf dem Display.
+  let winnerSoundAudio = null;
+  App.socket.on('fx:winner-sound', ({ playing } = {}) => {
+    if (playing) {
+      if (!winnerSoundAudio) {
+        winnerSoundAudio = new Audio('/assets/audio/winner.mp3');
+        winnerSoundAudio.preload = 'auto';
+        winnerSoundAudio.addEventListener('ended', () => {
+          App.socket.emit('display:winner-sound-ended');
+        });
+      }
+      winnerSoundAudio.currentTime = 0;
+      winnerSoundAudio.play().catch(() => {});
+    } else if (winnerSoundAudio) {
+      winnerSoundAudio.pause();
+      winnerSoundAudio.currentTime = 0;
+    }
+  });
+
   // Erster Buzz: Buzzer-Sound als MP3.
   let buzzerWinnerAudio = null;
   function playBuzzerWinnerSound() {
@@ -1566,8 +1585,20 @@
     if (soundUnlockEl) {
       soundUnlockEl.onclick = () => unlockAudio(true);
     }
-    window.addEventListener('pointerdown', () => unlockAudio(false), { once: true });
-    window.addEventListener('keydown', () => unlockAudio(false), { once: true });
+    // Ton immer automatisch aktivieren: sofort beim Laden versuchen und
+    // dauerhaft nachhaken, bis der Browser die Wiedergabe freigibt
+    // (Autoplay-Policy). Jede Nutzer-Geste zählt zusätzlich als Freigabe.
+    const tryAutoSound = (fromUserGesture) => {
+      unlockAudio(false);
+      if (ambientDesired.enabled && ambientBlocked) applyAmbientMusic(fromUserGesture);
+    };
+    tryAutoSound(false);
+    setInterval(() => {
+      const ctxRunning = audioCtx && audioCtx.state === 'running';
+      if (!ctxRunning || (ambientDesired.enabled && ambientBlocked)) tryAutoSound(false);
+    }, 2000);
+    window.addEventListener('pointerdown', () => tryAutoSound(true));
+    window.addEventListener('keydown', () => tryAutoSound(true));
   }
 
   function syncCrashSound(state, crashActive) {
